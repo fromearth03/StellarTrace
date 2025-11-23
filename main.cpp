@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <fstream>
 #include <sstream>
+#include "include/Lexicon.hpp"
+#include "include/ForwardIndex.hpp"
 
 namespace fs = std::filesystem;
 
@@ -15,6 +17,8 @@ int main() {
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
+    ForwardIndex f("Lexicon/Lexicon (test).txt", "test.json");
+    f.forwardIndex_creator();
     //Use following syntax to create lexicon if the file is json make the secon argument true other wise it is false
     /*
      #include "include/Lexicon.hpp"
