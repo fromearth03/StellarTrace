@@ -8,7 +8,7 @@
 #include <sstream>
 #include "include/Lexicon.hpp"
 #include "include/ForwardIndex.hpp"
-
+#include "include/astronomicalunitc.hpp"
 namespace fs = std::filesystem;
 
 int main() {
@@ -17,8 +17,16 @@ int main() {
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
+    //Following code is to read data faster from file with doc id starting byte and length
+    /*
+    AUC a("test.json" , "test.csv");
+    a.createIndexFile();
+    */
+    // Use following to create forward index first comment is path to lexicon file and second to data file
+    /*
     ForwardIndex f("Lexicon/Lexicon (test).txt", "test.json");
     f.forwardIndex_creator();
+    */
     //Use following syntax to create lexicon if the file is json make the secon argument true other wise it is false
     /*
      #include "include/Lexicon.hpp"
