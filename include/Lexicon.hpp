@@ -31,7 +31,7 @@ private:
     std::string cleanWord(const std::string& w) {
         std::string result;
         for (char c : w) {
-            if (std::isalnum(c, current_locale))
+            if (std::isalpha(c, current_locale))
                 result += std::tolower(c, current_locale);
         }
         return result;
@@ -68,8 +68,42 @@ public:
                 // Process JSON lines: extract "title" and "abstract"
                 try {
                     json paper = json::parse(line);
-                    if (paper.contains("title")) content += paper["title"].get<std::string>() + " ";
-                    if (paper.contains("abstract")) content += paper["abstract"].get<std::string>();
+                    //----------------------------------------------------------------------------------
+                    auto safe_get_string = [](const json& j) -> std::string {
+                        if (!j.is_null()) {
+                            // Check if it is a string (optional, but robust)
+                            if (j.is_string()) {
+                                return j.get<std::string>();
+                            }
+                        }
+                        return ""; // Return empty string if null or missing/non-string
+                    };
+                    //====================================================================================
+                    if (paper.contains("title")) content += safe_get_string(paper["title"]) + " ";
+                    if (paper.contains("abstract")) content += safe_get_string(paper["abstract"]) + " ";
+
+                    if (paper.contains("submitter")) {
+                        content += safe_get_string(paper["submitter"]) + " ";
+                    }
+                    if (paper.contains("authors_parsed") && paper["authors_parsed"].is_array()) {
+                        const json& authorsArray = paper["authors_parsed"];
+
+                        for (const auto& authorEntry : authorsArray) {
+                            if (authorEntry.is_array() && authorEntry.size() >= 2) {
+
+                                // Use safe_get_string for individual author name parts as well
+                                std::string lastName = safe_get_string(authorEntry.at(0));
+                                std::string firstName = safe_get_string(authorEntry.at(1));
+
+                                content += firstName + " " + lastName + " ";
+
+                                // Include middle initial/suffix if available (Index 2)
+                                if (authorEntry.size() >= 3 && !authorEntry.at(2).empty()) {
+                                    content += safe_get_string(authorEntry.at(2)) + " ";
+                                }
+                            }
+                        }
+                    }
                 } catch (json::parse_error&) { continue; }
                   catch (json::out_of_range&) { continue; }
             } else {
@@ -101,6 +135,11 @@ public:
 
         std::cout << "Processed " << words.size() << " unique words.\n";
         file.close();
+    }
+
+    // Getter for read-only access to the word map
+    const std::unordered_map<std::string, unsigned int>& getWords() const {
+        return words;
     }
 
     // Save lexicon to a text file
