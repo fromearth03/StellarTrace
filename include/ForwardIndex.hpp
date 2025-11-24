@@ -18,7 +18,7 @@ class ForwardIndex {
     std::locale current_locale;
 
     std::unordered_map<std::string, unsigned int> words;
-    std::unordered_map<std::string, std::list<unsigned int>> f_index;
+    std::unordered_map<std::string, std::unordered_map<unsigned int, unsigned int>> f_index;
 
     std::unordered_set<std::string> stopWords = {
         "the","and","is","in","at","of","on","for","to","a","an","that","it"
@@ -50,84 +50,94 @@ public:
     }
 
     void forwardIndex_creator() {
-        lexiconCreater();
+    lexiconCreater();
 
-        std::ifstream file(path_dataset);
-        if (!file.is_open()) return;
+    std::ifstream file(path_dataset);
+    if (!file.is_open()) return;
 
-        std::string line;
-        unsigned int uncounted = 0;
+    std::string line;
+    unsigned int uncounted = 0;
 
-        while (std::getline(file, line)) {
-            if (line.empty()) continue;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
 
-            std::string id = "";
-            std::string content;
+        std::string id = "";
+        std::string content;
 
-            try {
-                json paper = json::parse(line);
-                auto get = [](const json& j){ return j.is_string() ? j.get<std::string>() : ""; };
+        try {
+            json paper = json::parse(line);
+            auto get = [](const json& j){ return j.is_string() ? j.get<std::string>() : ""; };
 
-                if (paper.contains("id"))
-                    id = get(paper["id"]);
-                else
-                    id = "Unassigned" + std::to_string(++uncounted);
+            if (paper.contains("id"))
+                id = get(paper["id"]);
+            else
+                id = "Unassigned" + std::to_string(++uncounted);
 
-                if (paper.contains("title"))
-                    content += get(paper["title"]) + " ";
+            if (paper.contains("title"))
+                content += get(paper["title"]) + " ";
 
-                if (paper.contains("abstract"))
-                    content += get(paper["abstract"]) + " ";
+            if (paper.contains("abstract"))
+                content += get(paper["abstract"]) + " ";
 
-                if (paper.contains("submitter"))
-                    content += get(paper["submitter"]) + " ";
+            if (paper.contains("submitter"))
+                content += get(paper["submitter"]) + " ";
 
-                if (paper.contains("authors_parsed") && paper["authors_parsed"].is_array()) {
-                    for (const auto& a : paper["authors_parsed"]) {
-                        if (a.is_array() && a.size() >= 2) {
-                            content += get(a[1]) + " ";
-                            content += get(a[0]) + " ";
-                            if (a.size() >= 3)
-                                content += get(a[2]) + " ";
-                        }
+            if (paper.contains("authors_parsed") && paper["authors_parsed"].is_array()) {
+                for (const auto& a : paper["authors_parsed"]) {
+                    if (a.is_array() && a.size() >= 2) {
+                        content += get(a[1]) + " ";
+                        content += get(a[0]) + " ";
+                        if (a.size() >= 3)
+                            content += get(a[2]) + " ";
                     }
                 }
-
-            } catch (...) {
-                continue;
             }
 
-            for (char& c : content)
-                if (!std::isalnum(c, current_locale))
-                    c = ' ';
+        } catch (...) {
+            continue;
+        }
 
-            std::list<unsigned int> ids;
-            std::istringstream iss(content);
-            std::string w;
+        for (char& c : content)
+            if (!std::isalnum(c, current_locale))
+                c = ' ';
 
-            while (iss >> w) {
-                std::string cleaned = cleanWord(w);
+        // count of each word in doc will be used in creation of inverted index
+        std::unordered_map<unsigned int, unsigned int> freq;
 
-                if (cleaned.empty()) continue;
-                if (stopWords.count(cleaned)) continue;
 
-                auto it = words.find(cleaned);
-                if (it != words.end())
-                    ids.push_back(it->second);
+        std::istringstream iss(content);
+        std::string w;
+
+        while (iss >> w) {
+            std::string cleaned = cleanWord(w);
+
+            if (cleaned.empty()) continue;
+            if (stopWords.count(cleaned)) continue;
+
+            auto it = words.find(cleaned);
+            if (it != words.end()) {
+                unsigned int wid = it->second;
+                freq[wid]++;
             }
-
-            f_index.emplace(id, ids);
         }
-        std::ofstream out("ForwardIndex.txt");
-        for (const auto& entry : f_index) {
-            out << entry.first << " : ";
-            for (const auto& wid : entry.second)
-                out << wid << " ";
-            out << "\n";
-        }
-        out.close();
 
+        f_index.emplace(id, freq);    // store the map instead of list
     }
+
+    // Write output
+    std::ofstream out("ForwardIndex.txt");
+    for (const auto& entry : f_index) {
+        out << entry.first << " : ";
+
+        for (const auto& p : entry.second) {
+            out << p.first << "(" << p.second << ") ";   // wid(count)
+        }
+
+        out << "\n";
+    }
+    out.close();
+}
+
 };
 
 #endif

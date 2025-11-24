@@ -1,0 +1,2 @@
+#define FORWARD_INDEX
+#
