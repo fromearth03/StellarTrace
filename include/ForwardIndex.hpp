@@ -36,9 +36,14 @@ public:
         if (!ifs.is_open()) return;
 
         std::string word;
-        unsigned int id;
-        while (ifs >> word >> id)
-            words.emplace(word, id);
+        std::string idStr;
+        while (ifs >> word >> idStr) {
+            // Clean commas from lexicon IDs
+            idStr.erase(std::remove(idStr.begin(), idStr.end(), ','), idStr.end());
+            words.emplace(word, std::stoul(idStr));
+        }
+
+        ifs.close();
     }
 
     std::string cleanWord(const std::string& w) {
