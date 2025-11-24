@@ -9,6 +9,7 @@
 #include "include/Lexicon.hpp"
 #include "include/ForwardIndex.hpp"
 #include "include/astronomicalunitc.hpp"
+#include "include/InvertedIndex.hpp"
 namespace fs = std::filesystem;
 
 int main() {
@@ -17,6 +18,11 @@ int main() {
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
+    //use following code to create inverted index
+    //InvertedIndex I ("Lexicon/Lexicon (test).txt", "asdf","ForwardIndex.txt");
+    //I.invertedIndex_writer();
+
+
     //Following code is to read data faster from file with doc id starting byte and length
     /*
     AUC a("test.json" , "test.csv");
