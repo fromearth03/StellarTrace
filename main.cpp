@@ -11,7 +11,10 @@
 #include "include/astronomicalunitc.hpp"
 #include "include/InvertedIndex.hpp"
 #include "include/SearchEngine.hpp"
+#include "include/external/httplib.h"
 namespace fs = std::filesystem;
+using namespace httplib;
+
 
 int main() {
     try {
@@ -19,48 +22,71 @@ int main() {
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
+
     SearchEngine engine;
 
-    std::cout << "========================================\n";
-    std::cout << "      StellarTrace Search Engine        \n";
-    std::cout << "========================================\n";
+    std::cout << "Loading Engine..." << std::endl;
+    // Ensure these match your actual file names!
+    engine.loadLexicon("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt");
+    engine.loadInvertedIndex("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/inverted_index.txt");
+    engine.loadDocMap("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv");
+    engine.setDatasetPath("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json");
 
-    // 2. Load the Data Files
-    // CRITICAL: Ensure these filenames match exactly what you have on your disk
+    std::cout << "Engine Ready on http://localhost:8080" << std::endl;
 
-    std::cout << "[*] Loading Lexicon..." << std::endl;
-    // Format: word id
-    engine.loadLexicon("Lexicon/Lexicon (test).txt");
+    Server svr;
 
-    std::cout << "[*] Loading Inverted Index..." << std::endl;
-    // Format: WordID idf : docID(count,mask) ...
-    engine.loadInvertedIndex("InvertedIndextest1.txt");
+    svr.Get("/search", [&](const Request& req, Response& res) {
+        res.set_header("Access-Control-Allow-Origin", "*"); // Allow React to connect
 
-    std::cout << "[*] Loading Document Metadata..." << std::endl;
-    // Format: internal_id|original_id|offset|length
-    engine.loadDocMap("test.csv");
-    engine.setDatasetPath("test.json");
+        if (req.has_param("q")) {
+            std::string query = req.get_param_value("q");
 
-    std::cout << "[*] System Ready.\n" << std::endl;
+            // Get the list of full JSON objects
+            std::vector<json> results = engine.search(query);
 
-    // 3. Interactive Search Loop
-    std::string query;
-    while (true) {
-        std::cout << "Enter search query (or 'exit'): ";
-        if (!std::getline(std::cin, query)) break; // Handle EOF
-
-        // Exit condition
-        if (query == "exit" || query == "quit") {
-            std::cout << "Shutting down..." << std::endl;
-            break;
+            // Convert directly to string and send
+            json response_json = results; // Implicit conversion to JSON array
+            res.set_content(response_json.dump(), "application/json");
+        } else {
+            res.set_content("[]", "application/json");
         }
+    });
 
-        // Skip empty searches
-        if (query.empty()) continue;
+    svr.listen("0.0.0.0", 8080);
+    /*Search Engine Logic
+    SearchEngine engine;
 
-        // 4. Call the search function
-        engine.search(query);
-    }
+    std::cout << "Loading Engine..." << std::endl;
+    // Ensure these match your actual file names!
+    engine.loadLexicon("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (test).txt");
+    engine.loadInvertedIndex("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/InvertedIndextest.txt");
+    engine.loadDocMap("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/test.csv");
+    engine.setDatasetPath("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/test.json");
+
+    std::cout << "Engine Ready on http://localhost:8080" << std::endl;
+
+    Server svr;
+
+    svr.Get("/search", [&](const Request& req, Response& res) {
+        res.set_header("Access-Control-Allow-Origin", "*"); // Allow React to connect
+
+        if (req.has_param("q")) {
+            std::string query = req.get_param_value("q");
+
+            // Get the list of full JSON objects
+            std::vector<json> results = engine.search(query);
+
+            // Convert directly to string and send
+            json response_json = results; // Implicit conversion to JSON array
+            res.set_content(response_json.dump(), "application/json");
+        } else {
+            res.set_content("[]", "application/json");
+        }
+    });
+
+    svr.listen("0.0.0.0", 8080);
+    */
     //use following code to create inverted index
     //InvertedIndex I ("Lexicon/Lexicon (test).txt", "asdf","ForwardIndex.txt");
     //I.invertedIndex_writer();
