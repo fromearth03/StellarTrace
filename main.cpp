@@ -10,6 +10,7 @@
 #include "include/ForwardIndex.hpp"
 #include "include/astronomicalunitc.hpp"
 #include "include/InvertedIndex.hpp"
+#include "include/SearchEngine.hpp"
 namespace fs = std::filesystem;
 
 int main() {
@@ -17,6 +18,48 @@ int main() {
         std::locale::global(std::locale(""));
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
+    }
+    SearchEngine engine;
+
+    std::cout << "========================================\n";
+    std::cout << "      StellarTrace Search Engine        \n";
+    std::cout << "========================================\n";
+
+    // 2. Load the Data Files
+    // CRITICAL: Ensure these filenames match exactly what you have on your disk
+
+    std::cout << "[*] Loading Lexicon..." << std::endl;
+    // Format: word id
+    engine.loadLexicon("Lexicon/Lexicon (test).txt");
+
+    std::cout << "[*] Loading Inverted Index..." << std::endl;
+    // Format: WordID idf : docID(count,mask) ...
+    engine.loadInvertedIndex("InvertedIndextest1.txt");
+
+    std::cout << "[*] Loading Document Metadata..." << std::endl;
+    // Format: internal_id|original_id|offset|length
+    engine.loadDocMap("test.csv");
+    engine.setDatasetPath("test.json");
+
+    std::cout << "[*] System Ready.\n" << std::endl;
+
+    // 3. Interactive Search Loop
+    std::string query;
+    while (true) {
+        std::cout << "Enter search query (or 'exit'): ";
+        if (!std::getline(std::cin, query)) break; // Handle EOF
+
+        // Exit condition
+        if (query == "exit" || query == "quit") {
+            std::cout << "Shutting down..." << std::endl;
+            break;
+        }
+
+        // Skip empty searches
+        if (query.empty()) continue;
+
+        // 4. Call the search function
+        engine.search(query);
     }
     //use following code to create inverted index
     //InvertedIndex I ("Lexicon/Lexicon (test).txt", "asdf","ForwardIndex.txt");
