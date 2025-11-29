@@ -44,6 +44,7 @@ public:
     }
 
     void forward_inverted_Index_creator() {
+        // First, scan the file to build f_index for number_docs
         std::ifstream file(path_forward);
         if (!file.is_open()) return;
 
@@ -82,7 +83,7 @@ public:
                             int mask = std::stoi(token.substr(p2 + 1, p3 - p2 - 1));
 
                             ids.push_back(wid);
-                            i_index[wid].push_back(std::make_tuple(docID, count, mask));
+                            // Removed i_index building here to avoid building full inverted index
                         }
                     } catch (...) {
                         continue;
@@ -93,6 +94,77 @@ public:
         }
 
         file.close();
+
+        // Now, open output file
+        std::ofstream out("InvertedIndextest1.txt");
+        if (!out.is_open()) return;
+
+        // For each word in lexicon, scan the file again to collect postings for that word, compute IDF, write, and free memory
+        for (auto& [word, wid] : words) {
+            std::list<std::tuple<std::string, unsigned int, int>> postings;
+            unsigned int df = 0;
+
+            std::ifstream file2(path_forward);
+            std::string line2;
+            while (std::getline(file2, line2)) {
+                if (line2.empty()) continue;
+
+                size_t colonPos2 = line2.find(':');
+                if (colonPos2 == std::string::npos) continue;
+
+                std::string docID2 = line2.substr(0, colonPos2);
+                while (!docID2.empty() && docID2.back() == ' ') docID2.pop_back();
+
+                std::string wordIdsStr2 = line2.substr(colonPos2 + 1);
+
+                std::istringstream iss2(wordIdsStr2);
+                std::string token2;
+                while (iss2 >> token2) {
+                    size_t p1 = token2.find('(');
+                    size_t p3 = token2.find(')');
+
+                    if (p1 != std::string::npos && p3 != std::string::npos) {
+                        try {
+                            std::string idPart = token2.substr(0, p1);
+                            idPart.erase(std::remove(idPart.begin(), idPart.end(), ','), idPart.end());
+                            unsigned int w = std::stoul(idPart);
+
+                            if (w == wid) {
+                                size_t p2 = token2.find(',', p1);
+
+                                if (p2 != std::string::npos && p2 < p3) {
+                                    unsigned int count = std::stoul(token2.substr(p1 + 1, p2 - p1 - 1));
+                                    int mask = std::stoi(token2.substr(p2 + 1, p3 - p2 - 1));
+
+                                    postings.push_back(std::make_tuple(docID2, count, mask));
+                                    ++df;
+                                }
+                            }
+                        } catch (...) {
+                            continue;
+                        }
+                    }
+                }
+            }
+            file2.close();
+
+            unsigned int N = f_index.size();
+            double idfVal = (df > 0) ? std::log(static_cast<double>(N) / df) : 0.0;
+
+            out << wid << " " << idfVal << " : ";
+            for (auto &t : postings) {
+                std::string docID;
+                unsigned int count;
+                int mask;
+                std::tie(docID, count, mask) = t;
+                out << docID << "(" << count << "," << mask << ") ";
+            }
+            out << "\n";
+
+            // postings is automatically cleared when going out of scope, freeing memory for next word
+        }
+
+        out.close();
     }
 
     unsigned int number_docs() {
@@ -113,28 +185,7 @@ public:
     void invertedIndex_writer() {
         lexiconCreater();
         forward_inverted_Index_creator();
-        idf_calculate();
-
-        std::ofstream out("InvertedIndex.txt");
-        if (!out.is_open()) return;
-
-        for (auto &entry : i_index) {
-            unsigned int wid = entry.first;
-
-            double idfVal = (idf.find(wid) != idf.end()) ? idf[wid] : 0.0;
-
-            out << wid << " " << idfVal << " : ";
-            for (auto &t : entry.second) {
-                std::string docID;
-                unsigned int count;
-                int mask;
-                std::tie(docID, count, mask) = t;
-                out << docID << "(" << count << "," << mask << ") ";
-            }
-            out << "\n";
-        }
-
-        out.close();
+        // Removed idf_calculate and writing since it's now done inside forward_inverted_Index_creator for memory efficiency
     }
 };
 
