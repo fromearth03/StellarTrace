@@ -1,20 +1,26 @@
+#define _WIN32_WINNT 0x0A00  // Windows 10
 #include <locale>
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 #include <filesystem>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <fstream>
 #include <sstream>
+#include <iomanip>
 #include "include/Lexicon.hpp"
 #include "include/ForwardIndex.hpp"
 #include "include/astronomicalunitc.hpp"
 #include "include/InvertedIndex.hpp"
 #include "include/SearchEngine.hpp"
+#include "include/barrels.hpp"
 #include "include/external/httplib.h"
+
 namespace fs = std::filesystem;
 using namespace httplib;
-
 
 int main() {
     try {
@@ -23,17 +29,42 @@ int main() {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
 
+    // =======================
+    // 0️⃣ Generate CSV for document offsets
+    // =======================
+    std::cout << "Generating doc map CSV..." << std::endl;
+    AUC auc("Samplefiles/test.json", "Samplefiles/AUC.csv");
+    if (!auc.createIndexFile()) {
+        std::cerr << "Failed to create CSV index file. Exiting.\n";
+        return 1;
+    }
+
+    // =======================
+    // 1️⃣ Create/load barrels
+    // =======================
+    std::cout << "Creating barrels..." << std::endl;
+    Barrels barrels;
+    barrels.makeBarrels("Samplefiles/InvertedIndex.txt");
+
+    // =======================
+    // 2️⃣ Load search engine
+    // =======================
     SearchEngine engine;
 
     std::cout << "Loading Engine..." << std::endl;
-    // Ensure these match your actual file names!
-    engine.loadLexicon("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt");
-    engine.loadInvertedIndex("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/inverted_index.txt");
-    engine.loadDocMap("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv");
-    engine.setDatasetPath("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json");
+    engine.loadLexicon("Samplefiles/Lexicon (test).txt");
+
+    // ✅ Do NOT load full inverted index when using barrels
+    // engine.loadInvertedIndex("Samplefiles/InvertedIndex.txt");
+
+    engine.loadDocMap("Samplefiles/AUC.csv");
+    engine.setDatasetPath("Samplefiles/test.json");
 
     std::cout << "Engine Ready on http://localhost:8080" << std::endl;
 
+    // =======================
+    // 3️⃣ Start HTTP server
+    // =======================
     Server svr;
 
     svr.Get("/search", [&](const Request& req, Response& res) {
@@ -41,80 +72,36 @@ int main() {
 
         if (req.has_param("q")) {
             std::string query = req.get_param_value("q");
-
-            // Get the list of full JSON objects
-            std::vector<json> results = engine.search(query);
+            
+            double queryTimeMs = 0.0;
+            
+            // Search using barrels
+            std::vector<json> results = barrels.search(
+                query,
+                engine.getLexicon(),
+                engine.getDocTable(),
+                engine.getDatasetPath(),
+                &queryTimeMs
+            );
 
             // Convert directly to string and send
-            json response_json = results; // Implicit conversion to JSON array
+            json response_json;
+            response_json["results"] = results;
+            response_json["query_time_ms"] = queryTimeMs;
+            response_json["num_results"] = results.size();
+            
             res.set_content(response_json.dump(), "application/json");
+            
+            // Log to console
+            std::cout << "Query: \"" << query << "\" - " 
+                      << results.size() << " results in " 
+                      << std::fixed << std::setprecision(2) << queryTimeMs << " ms" << std::endl;
         } else {
             res.set_content("[]", "application/json");
         }
     });
 
     svr.listen("0.0.0.0", 8080);
-    /*Search Engine Logic
-    SearchEngine engine;
 
-    std::cout << "Loading Engine..." << std::endl;
-    // Ensure these match your actual file names!
-    engine.loadLexicon("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (test).txt");
-    engine.loadInvertedIndex("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/InvertedIndextest.txt");
-    engine.loadDocMap("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/test.csv");
-    engine.setDatasetPath("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/test.json");
-
-    std::cout << "Engine Ready on http://localhost:8080" << std::endl;
-
-    Server svr;
-
-    svr.Get("/search", [&](const Request& req, Response& res) {
-        res.set_header("Access-Control-Allow-Origin", "*"); // Allow React to connect
-
-        if (req.has_param("q")) {
-            std::string query = req.get_param_value("q");
-
-            // Get the list of full JSON objects
-            std::vector<json> results = engine.search(query);
-
-            // Convert directly to string and send
-            json response_json = results; // Implicit conversion to JSON array
-            res.set_content(response_json.dump(), "application/json");
-        } else {
-            res.set_content("[]", "application/json");
-        }
-    });
-
-    svr.listen("0.0.0.0", 8080);
-    */
-    //use following code to create inverted index
-    //InvertedIndex I ("Lexicon/Lexicon (test).txt", "asdf","ForwardIndex.txt");
-    //I.invertedIndex_writer();
-
-
-    //Following code is to read data faster from file with doc id starting byte and length
-    /*
-    AUC a("test.json" , "test.csv");
-    a.createIndexFile();
-    */
-    // Use following to create forward index first comment is path to lexicon file and second to data file
-    /*
-    ForwardIndex f("Lexicon/Lexicon (test).txt", "test.json");
-    f.forwardIndex_creator();
-    */
-    //Use following syntax to create lexicon if the file is json make the secon argument true other wise it is false
-    /*
-     #include "include/Lexicon.hpp"
-    Lexicon lexicon("CC-MAIN-20251005114239-20251005144239-00004.warc.wet", false);
-    lexicon.readfile_createmap();
-    lexicon.createLexicon();
-
-    //========================================================================
-    //For combined lexicon of all the files use this
-    #include "include/Lexiconfolder.hpp"
-    LexiconFolder lex("Lexicon"); // folder containing your .txt lexicon files
-    lex.mergeLexicons();          // merge all files into CombinedLexicon.txt
-
-    */
     return 0;
 }
