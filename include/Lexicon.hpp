@@ -10,6 +10,7 @@
 #include <sstream>
 #include <algorithm>
 #include <locale>
+#include <filesystem>
 #include <json.hpp>
 
 using json = nlohmann::json;
