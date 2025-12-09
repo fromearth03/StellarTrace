@@ -11,7 +11,8 @@ add_executable(StellarTrace main.cpp
         include/astronomicalunitc.hpp
         include/InvertedIndex.hpp
         include/SearchEngine.hpp
-        include/external/httplib.h)
+        include/external/httplib.h
+        include/barrels.hpp)
 
 # Include path for json.hpp
 target_include_directories(StellarTrace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/external/json/single_include/nlohmann)
