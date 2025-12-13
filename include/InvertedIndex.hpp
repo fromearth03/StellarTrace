@@ -119,7 +119,9 @@ public:
         size_t totalWords = i_index.size();
 
         // Iterate through the map (which is ALREADY sorted by WordID)
-        for (auto const& [wid, postings] : i_index) {
+        for (auto const& pair : i_index) {
+            unsigned int wid = pair.first;
+            auto const& postings = pair.second;
 
             unsigned int df = postings.size();
             // Calculate IDF

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stellar Trace Search</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: white;
+        background: black url('https://upload.wikimedia.org/wikipedia/commons/2/2c/Starsinthesky.jpg') repeat center center/cover;
+        overflow-x: hidden;
+    }
+    
+    .overlay {
+        background: rgba(0,0,0,0.65);
+        width: 100%;
+        min-height: 100vh;
+        padding: 20px;
+    }
+    
+    h1 {
+        text-align: center;
+        font-size: 3rem;
+        letter-spacing: 3px;
+        margin-bottom: 20px;
+        text-shadow: 0 0 10px #5af;
+    }
+
+    #searchBox {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 25px;
+    }
+
+    #query {
+        width: 50%;
+        padding: 10px 15px;
+        border-radius: 8px;
+        border: none;
+        font-size: 1rem;
+    }
+
+    #btn {
+        margin-left: 10px;
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: none;
+        background: #5af;
+        color: black;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .result-container {
+        width: 80%;
+        margin: auto;
+    }
+
+    details {
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+        box-shadow: 0 0 10px rgba(255,255,255,0.2);
+    }
+
+    summary {
+        cursor: pointer;
+        font-size: 1.2rem;
+        padding: 5px;
+    }
+
+    pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        background: rgba(0,0,0,0.4);
+        padding: 10px;
+        border-radius: 8px;
+    }
+</style>
+</head>
+<body>
+<div class="overlay">
+    <h1>⭐ Stellar Trace Search ⭐</h1>
+    <div id="searchBox">
+        <input type="text" id="query" placeholder="Search ArXiv (e.g., woman, physics, AI)..." />
+        <button id="btn" onclick="runSearch()">Search</button>
+    </div>
+
+    <div class="result-container" id="results"></div>
+</div>
+
+<script>
+async function runSearch() {
+    const q = document.getElementById('query').value.trim();
+    if (!q) return alert('Enter a search term');
+
+    const url = `http://localhost:8080/search?q=${encodeURIComponent(q)}`;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const resultsBox = document.getElementById('results');
+        resultsBox.innerHTML = '';
+
+        data.forEach((item, index) => {
+            const section = document.createElement('details');
+            const summary = document.createElement('summary');
+            summary.textContent = `Result ${index + 1} — ${item.title || "Untitled"}`;
+
+            const content = document.createElement('pre');
+            content.textContent = JSON.stringify(item, null, 4);
+
+            section.appendChild(summary);
+            section.appendChild(content);
+            resultsBox.appendChild(section);
+        });
+
+    } catch (err) {
+        alert('Error fetching data. Check server.');
+        console.error(err);
+    }
+}
+</script>
+</body>
+</html>
