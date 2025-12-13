@@ -147,7 +147,8 @@ public:
         f_index.emplace(id, ids);
 
         // write to file in required format
-        std::ofstream out("ForwardIndex.txt", std::ios::app);
+        std:: string outputfile = "ForwardIndextest.txt";
+        std::ofstream out("ForwardIndextest.txt", std::ios::app);
         out << id << " : ";
         for (auto& kv : freq) {
             unsigned int wid = kv.first;

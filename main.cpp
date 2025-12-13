@@ -1,20 +1,28 @@
 #include <locale>
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 #include <filesystem>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <fstream>
 #include <sstream>
+#include <iomanip>
 #include "include/Lexicon.hpp"
 #include "include/ForwardIndex.hpp"
 #include "include/astronomicalunitc.hpp"
 #include "include/InvertedIndex.hpp"
 #include "include/SearchEngine.hpp"
+#include "include/barrels.hpp"
 #include "include/external/httplib.h"
+#include <chrono>
+using namespace std;
+using Clock1 = std::chrono::high_resolution_clock;
 namespace fs = std::filesystem;
 using namespace httplib;
-
+using namespace std;
 
 int main() {
     try {
@@ -23,98 +31,84 @@ int main() {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
 
+
+    // ================= PHASE 1: BUILD BARRELS =================
+    cout << "--- PHASE 1: GENERATING BARRELS ---" << endl;
+    // auto t1 = Clock1::now();
+    //
+    // BarrelGenerator generator(100);
+    // generator.createBarrels(
+    //     "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/inverted_index.txt"
+    // );
+    //
+    // auto t2 = Clock1::now();
+    // cout << "[TIME] Barrel generation took "
+    //      << chrono::duration_cast<chrono::milliseconds>(t2 - t1).count()
+    //      << " ms\n";
+    //
+
+    // ================= PHASE 2: INIT SEARCH ENGINE =================
+    cout << "\n--- PHASE 2: INITIALIZING SEARCH ENGINE ---" << endl;
+    auto t3 = Clock1::now();
+
     SearchEngine engine;
 
-    std::cout << "Loading Engine..." << std::endl;
-    // Ensure these match your actual file names!
-    engine.loadLexicon("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt");
-    engine.loadInvertedIndex("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/inverted_index.txt");
-    engine.loadDocMap("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv");
-    engine.setDatasetPath("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json");
+    engine.loadLexicon(
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt"
+    );
 
-    std::cout << "Engine Ready on http://localhost:8080" << std::endl;
+    engine.loadDocMap(
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv"
+    );
+
+    engine.loadBarrels();   // 🔥 REQUIRED
+
+    engine.setDatasetPath(
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json"
+    );
+
+    auto t4 = Clock1::now();
+    cout << "[TIME] Engine initialization took "
+         << chrono::duration_cast<chrono::milliseconds>(t4 - t3).count()
+         << " ms\n";
+
+    cout << "[OK] Search engine ready\n";
+
+
+    // ================= PHASE 3: START HTTP SERVER =================
+    cout << "\n--- PHASE 3: STARTING HTTP SERVER ---" << endl;
 
     Server svr;
 
     svr.Get("/search", [&](const Request& req, Response& res) {
-        res.set_header("Access-Control-Allow-Origin", "*"); // Allow React to connect
+        res.set_header("Access-Control-Allow-Origin", "*");
 
-        if (req.has_param("q")) {
-            std::string query = req.get_param_value("q");
-
-            // Get the list of full JSON objects
-            std::vector<json> results = engine.search(query);
-
-            // Convert directly to string and send
-            json response_json = results; // Implicit conversion to JSON array
-            res.set_content(response_json.dump(), "application/json");
-        } else {
+        if (!req.has_param("q")) {
             res.set_content("[]", "application/json");
+            return;
         }
+
+        string query = req.get_param_value("q");
+
+        // ⏱ START QUERY TIMER
+        auto qs = Clock1::now();
+
+        auto results = engine.search(query);
+
+        auto qe = Clock1::now();
+        auto durationMs =
+            chrono::duration_cast<chrono::milliseconds>(qe - qs).count();
+
+        cout << "[TIME] Query \"" << query
+             << "\" took " << durationMs << " ms\n";
+
+        json response = results;
+        res.set_content(response.dump(), "application/json");
     });
 
-    svr.listen("0.0.0.0", 8080);
-    /*Search Engine Logic
-    SearchEngine engine;
-
-    std::cout << "Loading Engine..." << std::endl;
-    // Ensure these match your actual file names!
-    engine.loadLexicon("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (test).txt");
-    engine.loadInvertedIndex("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/InvertedIndextest.txt");
-    engine.loadDocMap("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/test.csv");
-    engine.setDatasetPath("/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/test.json");
-
-    std::cout << "Engine Ready on http://localhost:8080" << std::endl;
-
-    Server svr;
-
-    svr.Get("/search", [&](const Request& req, Response& res) {
-        res.set_header("Access-Control-Allow-Origin", "*"); // Allow React to connect
-
-        if (req.has_param("q")) {
-            std::string query = req.get_param_value("q");
-
-            // Get the list of full JSON objects
-            std::vector<json> results = engine.search(query);
-
-            // Convert directly to string and send
-            json response_json = results; // Implicit conversion to JSON array
-            res.set_content(response_json.dump(), "application/json");
-        } else {
-            res.set_content("[]", "application/json");
-        }
-    });
+    cout << "🚀 Server running at http://localhost:8080/search?q=your+query\n";
 
     svr.listen("0.0.0.0", 8080);
-    */
-    //use following code to create inverted index
-    //InvertedIndex I ("Lexicon/Lexicon (test).txt", "asdf","ForwardIndex.txt");
-    //I.invertedIndex_writer();
 
-
-    //Following code is to read data faster from file with doc id starting byte and length
-    /*
-    AUC a("test.json" , "test.csv");
-    a.createIndexFile();
-    */
-    // Use following to create forward index first comment is path to lexicon file and second to data file
-    /*
-    ForwardIndex f("Lexicon/Lexicon (test).txt", "test.json");
-    f.forwardIndex_creator();
-    */
-    //Use following syntax to create lexicon if the file is json make the secon argument true other wise it is false
-    /*
-     #include "include/Lexicon.hpp"
-    Lexicon lexicon("CC-MAIN-20251005114239-20251005144239-00004.warc.wet", false);
-    lexicon.readfile_createmap();
-    lexicon.createLexicon();
-
-    //========================================================================
-    //For combined lexicon of all the files use this
-    #include "include/Lexiconfolder.hpp"
-    LexiconFolder lex("Lexicon"); // folder containing your .txt lexicon files
-    lex.mergeLexicons();          // merge all files into CombinedLexicon.txt
-
-    */
     return 0;
 }
