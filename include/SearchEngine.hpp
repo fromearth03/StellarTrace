@@ -7,237 +7,284 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
-#include <cmath>
-#include <iomanip>
+#include <future>
 #include <json.hpp>
 
 using json = nlohmann::json;
 
-// --- Data Structures ---
+// ================= DATA STRUCTURES =================
+
 struct DocEntry {
     std::string docId;
-    int count;
+    int tf;
     int mask;
 };
 
 struct InvertedList {
-    double idf;
+    double idf = 0.0;
     std::vector<DocEntry> docs;
 };
 
 struct DocMetadata {
     std::string internalId;
-    long long offset;
-    long long length;
+    long long offset = 0;
+    long long length = 0;
 };
 
 struct SearchResult {
     std::string docId;
     double score;
     DocMetadata meta;
-    bool operator>(const SearchResult& other) const { return score > other.score; }
+    bool operator>(const SearchResult& o) const { return score > o.score; }
 };
+
+struct TermInfo {
+    std::string term;
+    int wordID;
+    size_t docCount;
+    InvertedList list;
+};
+
+// ================= SEARCH ENGINE =================
 
 class SearchEngine {
 private:
-    std::unordered_map<std::string, int> lexicon;
-    std::unordered_map<std::string, DocMetadata> docTable;
-    std::string rawDatasetPath;
+    static constexpr int TOTAL_BARRELS = 100;
+    static constexpr size_t MAX_DOCS_PER_TERM = 200000;
 
-    const int TOTAL_BARRELS = 100;
     const std::string BARREL_DIR = "Barrels/";
 
-    // --- Helpers ---
-    int parseInteger(std::string str) {
-        str.erase(std::remove(str.begin(), str.end(), ','), str.end());
-        try { return std::stoi(str); } catch (...) { return 0; }
+    const std::unordered_set<std::string> STOPWORDS = {
+        "the","is","are","was","were","to","of","and","or",
+        "a","an","in","on","for","with","by","as","at","from"
+    };
+
+    std::unordered_map<std::string, int> lexicon;
+    std::unordered_map<std::string, DocMetadata> docTable;
+    std::unordered_map<int, long long> barrelIndex[TOTAL_BARRELS];
+
+    std::string rawDatasetPath;
+
+    // ================= HELPERS =================
+
+    int parseInt(std::string s) {
+        s.erase(std::remove(s.begin(), s.end(), ','), s.end());
+        try { return std::stoi(s); } catch (...) { return 0; }
     }
 
-    long long parseLong(std::string str) {
-        str.erase(std::remove(str.begin(), str.end(), ','), str.end());
-        try { return std::stoll(str); } catch (...) { return 0; }
+    long long parseLong(std::string s) {
+        s.erase(std::remove(s.begin(), s.end(), ','), s.end());
+        try { return std::stoll(s); } catch (...) { return 0; }
     }
 
-    double calculateScore(const DocEntry& entry, double idf) {
-        double tf = static_cast<double>(entry.count);
-        double tf_idf = tf * idf;
-        double positionWeight = 1.0;
-        if (entry.mask == 1) positionWeight = 10.0;
-        else if (entry.mask == 2) positionWeight = 5.0;
-        return tf_idf + positionWeight;
+    double score(const DocEntry& e, double idf) {
+        double s = e.tf * idf;
+        if (e.mask == 1) s += 10;
+        else if (e.mask == 2) s += 5;
+        return s;
     }
 
-    // --- ROBUST BARREL SCANNER (The Fix) ---
-    InvertedList getPostingList(int wordID) {
+    // ================= THREAD-SAFE POSTING FETCH =================
+
+    InvertedList getPostingListThreadSafe(int wordID) {
         InvertedList result;
-        result.idf = 0.0;
+        int bID = wordID % TOTAL_BARRELS;
 
-        // 1. Determine which barrel holds this word
-        int barrelID = wordID % TOTAL_BARRELS;
-        std::string filename = BARREL_DIR + "barrel_" + std::to_string(barrelID) + ".txt";
-
-        std::ifstream file(filename);
-        if (!file.is_open()) {
-            // Uncomment for debugging:
-            // std::cerr << "[Warning] Could not open barrel: " << filename << std::endl;
-            return result;
-        }
+        std::ifstream file(BARREL_DIR + "barrel_" + std::to_string(bID) + ".txt");
+        if (!file.is_open()) return result;
 
         std::string line;
-        // 2. Scan the file line-by-line
-        while (std::getline(file, line)) {
-            if (line.empty()) continue;
+        auto it = barrelIndex[bID].find(wordID);
 
-            // Check if this line starts with our WordID
-            std::stringstream ss(line);
-            uint32_t currentID;
-            if (!(ss >> currentID)) continue;
+        if (it != barrelIndex[bID].end()) {
+            file.seekg(it->second);
+            std::getline(file, line);
+        }
 
-            if (currentID == (uint32_t)wordID) {
-                // FOUND IT! Parse the rest of the line.
-                // Format: WordID IDF : DocID(TF,Mask) ...
-
-                ss >> result.idf; // Read IDF
-
-                std::string colon;
-                ss >> colon; // Skip the ":" separator
-
-                std::string entryStr;
-                while (ss >> entryStr) {
-                    // Parse "0704.0001(3,1)"
-                    size_t p1 = entryStr.find('(');
-                    size_t comma = entryStr.find(',');
-                    size_t p2 = entryStr.find(')');
-
-                    if (p1 != std::string::npos) {
-                        try {
-                            DocEntry entry;
-                            entry.docId = entryStr.substr(0, p1);
-
-                            std::string tfStr = entryStr.substr(p1 + 1, comma - p1 - 1);
-                            std::string maskStr = entryStr.substr(comma + 1, p2 - comma - 1);
-
-                            entry.count = parseInteger(tfStr);
-                            entry.mask = parseInteger(maskStr);
-
-                            result.docs.push_back(entry);
-                        } catch (...) {}
-                    }
-                }
-                return result; // Stop reading once found
+        if (line.empty() || line.rfind(std::to_string(wordID), 0) != 0) {
+            file.seekg(0);
+            while (std::getline(file, line)) {
+                std::stringstream ss(line);
+                int id;
+                ss >> id;
+                if (id == wordID) break;
+                line.clear();
             }
         }
-        return result; // Word not found in this barrel
+
+        if (line.empty()) return result;
+
+        std::stringstream ss(line);
+        int id;
+        ss >> id >> result.idf;
+
+        std::string colon;
+        ss >> colon;
+
+        std::string token;
+        while (ss >> token) {
+            size_t p1 = token.find('(');
+            size_t p2 = token.find(',');
+            size_t p3 = token.find(')');
+
+            if (p1 == std::string::npos) continue;
+
+            DocEntry e;
+            e.docId = token.substr(0, p1);
+            e.tf = parseInt(token.substr(p1 + 1, p2 - p1 - 1));
+            e.mask = parseInt(token.substr(p2 + 1, p3 - p2 - 1));
+            result.docs.push_back(e);
+        }
+
+        return result;
+    }
+
+    // ================= FINALIZE =================
+
+    std::vector<json> finalizeResults(
+        std::unordered_map<std::string,double>& scores
+    ) {
+        std::vector<SearchResult> results;
+
+        for (auto& [doc, sc] : scores) {
+            if (!docTable.count(doc)) continue;
+            results.push_back({doc, sc, docTable.at(doc)});
+        }
+
+        if (results.empty()) return {};
+
+        size_t k = std::min<size_t>(10, results.size());
+        std::partial_sort(results.begin(), results.begin()+k,
+                          results.end(), std::greater<>());
+
+        std::ifstream raw(rawDatasetPath, std::ios::binary);
+        std::vector<json> out;
+
+        for (size_t i = 0; i < k; ++i) {
+            raw.seekg(results[i].meta.offset);
+            std::vector<char> buf(results[i].meta.length);
+            raw.read(buf.data(), buf.size());
+
+            try {
+                json j = json::parse(std::string(buf.begin(), buf.end()));
+                j["relevance_score"] = results[i].score;
+                out.push_back(j);
+            } catch (...) {}
+        }
+        return out;
     }
 
 public:
-    void setDatasetPath(const std::string& path) { rawDatasetPath = path; }
+    // ================= LOADERS =================
 
-    void loadLexicon(const std::string& filepath) {
-        std::cout << "[Engine] Loading Lexicon..." << std::endl;
-        std::ifstream file(filepath);
-        if (!file.is_open()) return;
-        std::string line, word, idStr;
-        while (std::getline(file, line)) {
-            if (line.empty()) continue;
-            std::stringstream ss(line);
-            ss >> word >> idStr;
-            lexicon[word] = parseInteger(idStr);
-        }
-        file.close();
+    void setDatasetPath(const std::string& p) { rawDatasetPath = p; }
+
+    void loadLexicon(const std::string& path) {
+        std::ifstream f(path);
+        std::string w; int id;
+        while (f >> w >> id) lexicon[w] = id;
     }
 
-    void loadDocMap(const std::string& filepath) {
-        std::cout << "[Engine] Loading Metadata..." << std::endl;
-        std::ifstream file(filepath);
-        if (!file.is_open()) return;
+    void loadDocMap(const std::string& path) {
+        std::ifstream f(path);
         std::string line;
-        std::getline(file, line);
-        while (std::getline(file, line)) {
-            if (line.empty()) continue;
+        std::getline(f, line);
+
+        while (std::getline(f, line)) {
             std::stringstream ss(line);
-            std::string segment;
-            std::vector<std::string> parts;
-            while (std::getline(ss, segment, '|')) {
-                parts.push_back(segment);
-            }
-            if (parts.size() >= 4) {
-                DocMetadata meta;
-                meta.internalId = parts[0];
-                meta.offset = parseLong(parts[2]);
-                meta.length = parseLong(parts[3]);
-                docTable[parts[1]] = meta;
+            std::string seg;
+            std::vector<std::string> v;
+            while (std::getline(ss, seg, '|')) v.push_back(seg);
+
+            if (v.size() >= 4) {
+                docTable[v[1]] = {
+                    v[0],
+                    parseLong(v[2]),
+                    parseLong(v[3])
+                };
             }
         }
-        file.close();
     }
 
-    std::vector<json> search(std::string query) {
-        std::transform(query.begin(), query.end(), query.begin(), ::tolower);
-        std::stringstream ss(query);
+    void loadBarrels() {
+        for (int i = 0; i < TOTAL_BARRELS; ++i) {
+            std::ifstream idx(BARREL_DIR + "barrel_" + std::to_string(i) + ".idx");
+            int w; long long o;
+            while (idx >> w >> o)
+                barrelIndex[i][w] = o;
+        }
+    }
+
+    // ================= SEARCH =================
+
+    std::vector<json> search(const std::string& query) {
+        std::stringstream qs(query);
         std::string term;
-        std::unordered_map<std::string, double> docScores;
 
-        std::cout << "[Search] Processing query: " << query << std::endl;
+        std::vector<std::future<InvertedList>> futures;
+        std::vector<TermInfo> terms;
 
-        while (ss >> term) {
-            if (lexicon.find(term) == lexicon.end()) {
-                std::cout << "  - Word not in lexicon: " << term << std::endl;
-                continue;
-            }
+        // ---- Spawn parallel fetch ----
+        while (qs >> term) {
+            std::transform(term.begin(), term.end(), term.begin(), ::tolower);
+            if (STOPWORDS.count(term)) continue;
+            if (!lexicon.count(term)) continue;
 
-            int wordID = lexicon[term];
-            std::cout << "  - Fetching WordID: " << wordID << " from Barrels..." << std::endl;
-
-            // --- FETCH FROM DISK ---
-            InvertedList list = getPostingList(wordID);
-
-            std::cout << "    > Found " << list.docs.size() << " docs." << std::endl;
-
-            for (const auto& entry : list.docs) {
-                docScores[entry.docId] += calculateScore(entry, list.idf);
-            }
+            int wid = lexicon[term];
+            futures.push_back(
+                std::async(std::launch::async,
+                           &SearchEngine::getPostingListThreadSafe,
+                           this, wid)
+            );
+            terms.push_back({term, wid, 0, {}});
         }
 
-        std::vector<json> output;
-        if (docScores.empty()) return output;
-
-        std::vector<SearchResult> results;
-        for (const auto& pair : docScores) {
-            SearchResult res;
-            res.docId = pair.first;
-            res.score = pair.second;
-            if (docTable.find(pair.first) != docTable.end()) {
-                res.meta = docTable[pair.first];
-            }
-            results.push_back(res);
+        // ---- Collect results ----
+        for (size_t i = 0; i < terms.size(); ++i) {
+            terms[i].list = futures[i].get();
+            terms[i].docCount = terms[i].list.docs.size();
         }
 
-        std::sort(results.begin(), results.end(), std::greater<SearchResult>());
+        if (terms.empty()) return {};
 
-        // Open binary mode for robust seeking in the raw JSON
-        std::ifstream rawFile(rawDatasetPath, std::ios::binary);
-        int count = 0;
+        std::sort(terms.begin(), terms.end(),
+                  [](auto& a, auto& b) {
+                      return a.docCount < b.docCount;
+                  });
 
-        for (const auto& res : results) {
-            if (count >= 10) break;
+        // ---- AND-style scoring (single-threaded, safe) ----
+        std::unordered_map<std::string,double> scores;
+        bool first = true;
 
-            rawFile.clear();
-            rawFile.seekg(res.meta.offset);
+        for (auto& t : terms) {
+            size_t limit = std::min(t.list.docs.size(), MAX_DOCS_PER_TERM);
+            std::unordered_map<std::string,const DocEntry*> lookup;
 
-            std::vector<char> buffer(res.meta.length);
-            if (rawFile.read(buffer.data(), res.meta.length)) {
-                std::string jsonStr(buffer.begin(), buffer.end());
-                try {
-                    json j = json::parse(jsonStr);
-                    j["relevance_score"] = res.score;
-                    output.push_back(j);
-                } catch (...) {}
+            for (size_t i = 0; i < limit; ++i)
+                lookup[t.list.docs[i].docId] = &t.list.docs[i];
+
+            if (first) {
+                for (auto& [id,e] : lookup)
+                    scores[id] = score(*e, t.list.idf);
+                first = false;
+            } else {
+                for (auto it = scores.begin(); it != scores.end(); ) {
+                    auto f = lookup.find(it->first);
+                    if (f == lookup.end())
+                        it = scores.erase(it);
+                    else {
+                        it->second += score(*f->second, t.list.idf);
+                        ++it;
+                    }
+                }
             }
-            count++;
+
+            if (scores.empty()) break;
         }
-        return output;
+
+        return finalizeResults(scores);
     }
 };
 
