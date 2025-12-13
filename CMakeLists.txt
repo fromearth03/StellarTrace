@@ -4,7 +4,7 @@ project(StellarTrace)
 set(CMAKE_CXX_STANDARD 20)
 
 add_executable(StellarTrace main.cpp
-        Jsonnormalization.cpp
+
         include/Lexicon.hpp
         include/Lexiconfolder.hpp
         include/ForwardIndex.hpp
