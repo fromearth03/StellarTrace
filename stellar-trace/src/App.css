@@ -1,0 +1,5 @@
+/* Minimal App styles - most styling is in Tailwind */
+.bg-gradient-radial {
+  background: radial-gradient(circle, var(--tw-gradient-stops));
+}
+
