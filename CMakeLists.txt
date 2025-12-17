@@ -13,7 +13,9 @@ add_executable(StellarTrace main.cpp
         include/SearchEngine.hpp
         include/external/httplib.h
         include/barrels.hpp
-        include/DynamicIndexer.hpp)
+        include/DynamicIndexer.hpp
+        include/Autocomplete.hpp
+        include/semanticsearch.hpp)
 
 # Include path for json.hpp
 target_include_directories(StellarTrace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/external/json/single_include/nlohmann)

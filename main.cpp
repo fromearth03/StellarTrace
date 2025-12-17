@@ -20,6 +20,8 @@
 #include "include/external/httplib.h"
 #include <chrono>
 
+#include "include/Autocomplete.hpp"
+
 using namespace std;
 using Clock1 = std::chrono::high_resolution_clock;
 namespace fs = std::filesystem;
@@ -31,6 +33,8 @@ int main() {
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
+    Autocomplete autocomplete;
+    autocomplete.loadLexicon("Lexicon/Lexicon (arxiv-metadata).txt");
 
     // ================= PHASE 1: BUILD BARRELS =================
     cout << "--- PHASE 1: GENERATING BARRELS ---" << endl;
@@ -133,6 +137,18 @@ int main() {
     }
 });
 
+    svr.Get("/autocomplete", [&](const Request& req, Response& res) {
+        res.set_header("Access-Control-Allow-Origin", "*");
+
+        if (!req.has_param("q")) {
+            res.set_content("[]", "application/json");
+            return;
+        }
+
+        auto suggestions = autocomplete.suggest(req.get_param_value("q"));
+        json j = suggestions;
+        res.set_content(j.dump(), "application/json");
+    });
 
 
 
