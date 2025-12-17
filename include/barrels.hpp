@@ -16,8 +16,8 @@ private:
     std::string outputDir;
 
 public:
-    BarrelGenerator(int nBarrels = 100)
-        : totalBarrels(nBarrels), outputDir("Barrels") {}
+    BarrelGenerator(int nBarrels = 1)
+        : totalBarrels(nBarrels), outputDir("bartest") {}
 
     void createBarrels(const std::string& inputPath) {
         std::cout << "[Barrels] Creating barrels...\n";

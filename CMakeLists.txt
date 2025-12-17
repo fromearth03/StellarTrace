@@ -12,7 +12,8 @@ add_executable(StellarTrace main.cpp
         include/InvertedIndex.hpp
         include/SearchEngine.hpp
         include/external/httplib.h
-        include/barrels.hpp)
+        include/barrels.hpp
+        include/DynamicIndexer.hpp)
 
 # Include path for json.hpp
 target_include_directories(StellarTrace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/external/json/single_include/nlohmann)

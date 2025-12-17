@@ -16,13 +16,14 @@
 #include "include/InvertedIndex.hpp"
 #include "include/SearchEngine.hpp"
 #include "include/barrels.hpp"
+#include "include/DynamicIndexer.hpp"          // ✅ ADDED
 #include "include/external/httplib.h"
 #include <chrono>
+
 using namespace std;
 using Clock1 = std::chrono::high_resolution_clock;
 namespace fs = std::filesystem;
 using namespace httplib;
-using namespace std;
 
 int main() {
     try {
@@ -31,21 +32,9 @@ int main() {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
 
-
     // ================= PHASE 1: BUILD BARRELS =================
     cout << "--- PHASE 1: GENERATING BARRELS ---" << endl;
-    // auto t1 = Clock1::now();
-    //
-    // BarrelGenerator generator(100);
-    // generator.createBarrels(
-    //     "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/inverted_index.txt"
-    // );
-    //
-    // auto t2 = Clock1::now();
-    // cout << "[TIME] Barrel generation took "
-    //      << chrono::duration_cast<chrono::milliseconds>(t2 - t1).count()
-    //      << " ms\n";
-    //
+    // (unchanged – commented as before)
 
     // ================= PHASE 2: INIT SEARCH ENGINE =================
     cout << "\n--- PHASE 2: INITIALIZING SEARCH ENGINE ---" << endl;
@@ -74,12 +63,22 @@ int main() {
 
     cout << "[OK] Search engine ready\n";
 
+    // ================= PHASE 2.5: INIT DYNAMIC INDEXER =================
+    // ✅ APPEND-ONLY, DOES NOT TOUCH SEARCH ENGINE
+    DynamicIndexer indexer(
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json",
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt",
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/ForwardIndextest.txt",
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv",
+        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Barrels"
+    );
 
     // ================= PHASE 3: START HTTP SERVER =================
     cout << "\n--- PHASE 3: STARTING HTTP SERVER ---" << endl;
 
     Server svr;
 
+    // ---------------- SEARCH (UNCHANGED) ----------------
     svr.Get("/search", [&](const Request& req, Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
 
@@ -90,12 +89,10 @@ int main() {
 
         string query = req.get_param_value("q");
 
-        // ⏱ START QUERY TIMER
         auto qs = Clock1::now();
-
         auto results = engine.search(query);
-
         auto qe = Clock1::now();
+
         auto durationMs =
             chrono::duration_cast<chrono::milliseconds>(qe - qs).count();
 
@@ -105,10 +102,44 @@ int main() {
         json response = results;
         res.set_content(response.dump(), "application/json");
     });
+    svr.Options("/adddoc", [&](const Request& req, Response& res) {
+    res.set_header("Access-Control-Allow-Origin", "*");
+    res.set_header("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set_header("Access-Control-Allow-Headers", "Content-Type");
+    res.status = 204;
+});
 
-    cout << "🚀 Server running at http://localhost:8080/search?q=your+query\n";
+
+    // ---------------- ADD DOCUMENT (NEW, APPEND ONLY) ----------------
+    svr.Post("/adddoc", [&](const Request& req, Response& res) {
+    res.set_header("Access-Control-Allow-Origin", "*");
+
+    try {
+        json doc = json::parse(req.body);
+
+        bool ok = indexer.addDocument(doc);
+        if (!ok) {
+            res.status = 500;
+            res.set_content(R"({"status":"error"})", "application/json");
+            return;
+        }
+
+        res.status = 200;
+        res.set_content(R"({"status":"ok"})", "application/json");
+
+    } catch (...) {
+        res.status = 400;
+        res.set_content(R"({"status":"invalid json"})", "application/json");
+    }
+});
+
+
+
+
+    cout << "🚀 Server running at:\n";
+    cout << "   GET  http://localhost:8080/search?q=your+query\n";
+    cout << "   POST http://localhost:8080/adddoc\n";
 
     svr.listen("0.0.0.0", 8080);
-
     return 0;
 }
