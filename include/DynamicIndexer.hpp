@@ -88,7 +88,7 @@ public:
           docMapPath(docmap),
           barrelDir(barrels)
     {
-        fs::create_directories(barrelDir);   // 🔥 IMPORTANT
+        fs::create_directories(barrelDir);
         loadLexicon();
         loadDocCounters();
     }
@@ -117,74 +117,84 @@ public:
             << length << "\n";
         map.close();
 
-        // ---------- TEXT ----------
-        std::string text;
+        // ---------- TOKEN COLLECTION ----------
+        std::unordered_map<unsigned int, unsigned int> freq;
+        std::unordered_map<unsigned int, int> mask;
+
         auto get = [](const json& j){
             return j.is_string() ? j.get<std::string>() : "";
         };
 
-        if (doc.contains("title"))        text += get(doc["title"]) + " ";
-        if (doc.contains("abstract"))     text += get(doc["abstract"]) + " ";
-        if (doc.contains("submitter"))    text += get(doc["submitter"]) + " ";
+        auto processField = [&](const std::string& src, int fieldMask) {
+            std::string t = src;
+            std::replace_if(t.begin(), t.end(),
+                [](char c){ return !std::isalnum(static_cast<unsigned char>(c)); }, ' ');
+
+            std::stringstream ss(t);
+            std::string w;
+
+            while (ss >> w) {
+                w = clean(w);
+                if (w.empty() || stopWords.count(w)) continue;
+
+                if (!lexicon.count(w)) {
+                    unsigned int id = ++nextWordID;
+                    lexicon[w] = id;
+                    newlyAddedWords.emplace_back(w, id);
+                }
+
+                unsigned int wid = lexicon[w];
+                freq[wid]++;
+
+                if (!mask.count(wid) || fieldMask > mask[wid])
+                    mask[wid] = fieldMask;
+            }
+        };
+
+        // ---------- FIELD PROCESSING ----------
+        if (doc.contains("abstract"))
+            processField(get(doc["abstract"]), 0);
+
+        if (doc.contains("title"))
+            processField(get(doc["title"]), 1);
+
+        if (doc.contains("submitter"))
+            processField(get(doc["submitter"]), 2);
 
         if (doc.contains("authors_parsed")) {
             for (auto& a : doc["authors_parsed"]) {
                 if (a.is_array() && a.size() >= 2) {
-                    text += get(a[0]) + " ";
-                    text += get(a[1]) + " ";
+                    processField(get(a[0]), 2);
+                    processField(get(a[1]), 2);
                 }
             }
         }
 
-        // ---------- TOKENIZE ----------
-        std::unordered_map<unsigned int, unsigned int> freq;
-
-        std::replace_if(text.begin(), text.end(),
-            [](char c){ return !std::isalnum(static_cast<unsigned char>(c)); }, ' ');
-
-        std::stringstream ss(text);
-        std::string w;
-
-        while (ss >> w) {
-            w = clean(w);
-            if (w.empty() || stopWords.count(w)) continue;
-
-            if (!lexicon.count(w)) {
-                unsigned int id = ++nextWordID;
-                lexicon[w] = id;
-                newlyAddedWords.emplace_back(w, id);
-            }
-
-            freq[lexicon[w]]++;
-        }
-
+        // ---------- WRITE NEW WORDS ----------
         appendLexicon();
 
         // ---------- FORWARD INDEX ----------
         std::ofstream fwd(forwardPath, std::ios::app);
         fwd << docID << " : ";
         for (auto& [wid, c] : freq)
-            fwd << wid << "(" << c << ",0) ";
+            fwd << wid << "(" << c << "," << mask[wid] << ") ";
         fwd << "\n";
         fwd.close();
 
-        // ---------- BARRELS + IDX (FIXED) ----------
+        // ---------- BARRELS + IDX ----------
         for (auto& [wid, c] : freq) {
             int b = wid % TOTAL_BARRELS;
 
-            std::string txtFile =
-                barrelDir + "/barrel_" + std::to_string(b) + ".txt";
-            std::string idxFile =
-                barrelDir + "/barrel_" + std::to_string(b) + ".idx";
+            std::string txtFile = barrelDir + "/barrel_" + std::to_string(b) + ".txt";
+            std::string idxFile = barrelDir + "/barrel_" + std::to_string(b) + ".idx";
 
             std::ofstream txt(txtFile, std::ios::app);
             if (!txt.is_open()) continue;
 
-            long long pos = txt.tellp();   // 🔥 offset BEFORE write
+            long long pos = txt.tellp();
 
             txt << wid << " 0 : "
-                << docID << "(" << c << ",0)"
-                << "\n";
+                << docID << "(" << c << "," << mask[wid] << ")\n";
             txt.close();
 
             std::ofstream idx(idxFile, std::ios::app);
