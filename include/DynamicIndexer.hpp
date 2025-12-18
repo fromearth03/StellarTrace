@@ -93,9 +93,8 @@ public:
         loadDocCounters();
     }
 
-    // =====================================================
+    
     // MAIN ENTRY
-    // =====================================================
     bool addDocument(json doc) {
         // ---------- ASSIGN ID ----------
         std::string docID = "new" + std::to_string(++nextNewID);
@@ -109,7 +108,7 @@ public:
         long long length = dump.size();
         raw.close();
 
-        // ---------- DOC MAP ----------
+        // DOC MAP
         std::ofstream map(docMapPath, std::ios::app);
         map << ++nextInternalDocID << "|"
             << docID << "|"
@@ -117,7 +116,7 @@ public:
             << length << "\n";
         map.close();
 
-        // ---------- TOKEN COLLECTION ----------
+        // TOKEN COLLECTION
         std::unordered_map<unsigned int, unsigned int> freq;
         std::unordered_map<unsigned int, int> mask;
 
@@ -151,7 +150,7 @@ public:
             }
         };
 
-        // ---------- FIELD PROCESSING ----------
+        // FIELD PROCESSING
         if (doc.contains("abstract"))
             processField(get(doc["abstract"]), 0);
 
@@ -170,10 +169,10 @@ public:
             }
         }
 
-        // ---------- WRITE NEW WORDS ----------
+        // WRITE NEW WORDS
         appendLexicon();
 
-        // ---------- FORWARD INDEX ----------
+        // FORWARD INDEX
         std::ofstream fwd(forwardPath, std::ios::app);
         fwd << docID << " : ";
         for (auto& [wid, c] : freq)
@@ -181,7 +180,7 @@ public:
         fwd << "\n";
         fwd.close();
 
-        // ---------- BARRELS + IDX ----------
+        // BARRELS + IDX
         for (auto& [wid, c] : freq) {
             int b = wid % TOTAL_BARRELS;
 

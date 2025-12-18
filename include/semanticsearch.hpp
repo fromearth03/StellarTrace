@@ -16,7 +16,7 @@ public:
     explicit SemanticSearch(const std::unordered_set<std::string>& lex)
         : lexicon(lex) {}
 
-    // ================= MAIN ENTRY =================
+    // MAIN ENTRY
     std::string rewriteQuery(const std::string& query) const {
         std::stringstream ss(query);
         std::string token;
@@ -32,21 +32,21 @@ public:
     }
 
 private:
-    // ---------------- RESOLVE SINGLE TOKEN ----------------
+    // RESOLVE SINGLE TOKEN
     std::string resolveToken(const std::string& input) const {
         std::string w = normalize(input);
         if (w.empty()) return "";
 
-        // 1️⃣ Exact match
+        // Exact match
         if (lexicon.count(w))
             return w;
 
-        // 2️⃣ Morphological normalization (Porter stem)
+        // Morphological normalization (Porter stem)
         std::string stem = porterStem(w);
         if (!stem.empty() && lexicon.count(stem))
             return stem;
 
-        // 3️⃣ Typo correction (edit distance 1)
+        // Typo correction (edit distance 1)
         for (const auto& term : lexicon) {
             if (editDistanceOne(w, term))
                 return term;
@@ -55,7 +55,7 @@ private:
         return "";
     }
 
-    // ---------------- NORMALIZE ----------------
+    // NORMALIZE
     std::string normalize(const std::string& s) const {
         std::string r;
         for (char c : s) {
@@ -65,7 +65,7 @@ private:
         return r;
     }
 
-    // ---------------- PORTER STEM (MINIMAL) ----------------
+    // PORTER STEM (MINIMAL)
     std::string porterStem(std::string w) const {
         if (w.size() < 4) return w;
 
@@ -99,7 +99,7 @@ private:
         return false;
     }
 
-    // ---------------- EDIT DISTANCE = 1 ----------------
+    // EDIT DISTANCE = 1 
     bool editDistanceOne(const std::string& a,
                          const std::string& b) const {
         int la = a.size(), lb = b.size();

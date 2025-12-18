@@ -16,7 +16,7 @@
 #include "include/InvertedIndex.hpp"
 #include "include/SearchEngine.hpp"
 #include "include/barrels.hpp"
-#include "include/DynamicIndexer.hpp"          // ✅ ADDED
+#include "include/DynamicIndexer.hpp"
 #include "include/external/httplib.h"
 #include <chrono>
 
@@ -36,11 +36,10 @@ int main() {
     Autocomplete autocomplete;
     autocomplete.loadLexicon("Lexicon/Lexicon (arxiv-metadata).txt");
 
-    // ================= PHASE 1: BUILD BARRELS =================
+    // PHASE 1: BUILD BARRELS
     cout << "--- PHASE 1: GENERATING BARRELS ---" << endl;
-    // (unchanged – commented as before)
 
-    // ================= PHASE 2: INIT SEARCH ENGINE =================
+    // PHASE 2: INIT SEARCH ENGINE
     cout << "\n--- PHASE 2: INITIALIZING SEARCH ENGINE ---" << endl;
     auto t3 = Clock1::now();
 
@@ -54,7 +53,7 @@ int main() {
         "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv"
     );
 
-    engine.loadBarrels();   // 🔥 REQUIRED
+    engine.loadBarrels();
 
     engine.setDatasetPath(
         "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json"
@@ -67,8 +66,7 @@ int main() {
 
     cout << "[OK] Search engine ready\n";
 
-    // ================= PHASE 2.5: INIT DYNAMIC INDEXER =================
-    // ✅ APPEND-ONLY, DOES NOT TOUCH SEARCH ENGINE
+    // PHASE 2.5: INIT DYNAMIC INDEXER
     DynamicIndexer indexer(
         "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json",
         "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt",
@@ -77,12 +75,12 @@ int main() {
         "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Barrels"
     );
 
-    // ================= PHASE 3: START HTTP SERVER =================
+    // PHASE 3: START HTTP SERVER
     cout << "\n--- PHASE 3: STARTING HTTP SERVER ---" << endl;
 
     Server svr;
 
-    // ---------------- SEARCH (UNCHANGED) ----------------
+    // SEARCH
     svr.Get("/search", [&](const Request& req, Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
 
@@ -114,7 +112,7 @@ int main() {
 });
 
 
-    // ---------------- ADD DOCUMENT (NEW, APPEND ONLY) ----------------
+    // ADD DOCUMENT
     svr.Post("/adddoc", [&](const Request& req, Response& res) {
     res.set_header("Access-Control-Allow-Origin", "*");
 
@@ -152,7 +150,7 @@ int main() {
 
 
 
-    cout << "🚀 Server running at:\n";
+    cout << "Server running at:\n";
     cout << "   GET  http://localhost:8080/search?q=your+query\n";
     cout << "   POST http://localhost:8080/adddoc\n";
 

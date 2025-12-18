@@ -54,7 +54,7 @@ public:
         std::string line;
         unsigned int totalDocsN = 0; // Count N on the fly
 
-        // --- STEP 1: READ FILE ONCE (O(N) Complexity) ---
+        // STEP 1: READ FILE ONCE (O(N) Complexity)
         while (std::getline(file, line)) {
             if (line.empty()) continue;
 
@@ -67,13 +67,13 @@ public:
 
             totalDocsN++; // Increment document count
 
-            // Parse the rest of the line: "wid(count,mask) wid(count,mask)"
+            // Parse the rest of the line
             std::string wordIdsStr = line.substr(colonPos + 1);
             std::istringstream iss(wordIdsStr);
             std::string token;
 
             while (iss >> token) {
-                // Token: "3150(1,2)"
+                // Token
                 size_t p1 = token.find('(');
                 size_t p3 = token.find(')');
 
@@ -101,7 +101,7 @@ public:
                 }
             }
 
-            // Optional: Progress indicator for loading
+            // Progress indicator for loading
             if (totalDocsN % 1000 == 0) {
                 std::cout << "\r[Loading] Processed " << totalDocsN << " documents..." << std::flush;
             }
@@ -109,7 +109,7 @@ public:
         file.close();
         std::cout << "\nIndex Loaded in Memory. Total Documents: " << totalDocsN << std::endl;
 
-        // --- STEP 2: WRITE TO FILE (Sequential Write) ---
+        // STEP 2: WRITE TO FILE
         std::cout << "Writing Inverted Index to Disk..." << std::endl;
 
         std::ofstream out("inverted_index_tst.txt");
@@ -118,7 +118,7 @@ public:
         size_t writeCount = 0;
         size_t totalWords = i_index.size();
 
-        // Iterate through the map (which is ALREADY sorted by WordID)
+        // Iterate through the map
         for (auto const& pair : i_index) {
             unsigned int wid = pair.first;
             auto const& postings = pair.second;
