@@ -22,6 +22,8 @@ The current implementation focuses on the **Backend Search Core**, capable of pr
 * **Robust Tokenization:** Features a custom text processing pipeline that handles UTF-8 characters, removes stop words, and normalizes scientific text.
 * **Relevance Ranking:** Implements a custom ranking algorithm based on **TF-IDF** (Term Frequency-Inverse Document Frequency) and **Positional Weighting** (prioritizing hits in Titles vs. Abstracts).
 * **Scalable Architecture:** Designed with a "Barrel" sharding system roadmap to support future expansion to multi-gigabyte datasets like Common Crawl.
+* **Semantic Search:** Enhances keyword-based retrieval by leveraging vector-based similarity to capture contextual meaning beyond exact term matches.
+* **Autocomplete Suggestions:** Provides real-time query completion using prefix-based lookup over the indexed lexicon to improve search usability.
 
 ---
 
