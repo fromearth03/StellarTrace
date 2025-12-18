@@ -152,7 +152,7 @@ public:
         std::string filename = inputPath.stem().string(); // "arxiv-metadata" for example
 
         // Safe output path in Lexicon folder
-        std::string outputfile = "Lexicon/Lexicon (" + filename + ").txt";
+        std::string outputfile = "Lexicon/Lexicon (" + filename + ")_org.txt";
 
         std::ofstream out(outputfile);
         if (!out.is_open()) {

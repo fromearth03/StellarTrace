@@ -33,8 +33,12 @@ int main() {
     } catch (...) {
         std::cerr << "Warning: Failed to set global UTF-8 locale.\n";
     }
+
+    //Change all the paths to the dataset path you choose
+    //Dataset file is in stellartrace/originaldata/.....
+
     Autocomplete autocomplete;
-    autocomplete.loadLexicon("Lexicon/Lexicon (arxiv-metadata).txt");
+    autocomplete.loadLexicon("/home/altair/CLionProjects/StellarTrace/OriginalData/Lexicon (arxiv-metadata)_org.txt");
 
     // PHASE 1: BUILD BARRELS
     cout << "--- PHASE 1: GENERATING BARRELS ---" << endl;
@@ -46,17 +50,17 @@ int main() {
     SearchEngine engine;
 
     engine.loadLexicon(
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt"
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/Lexicon (arxiv-metadata)_org.txt"
     );
 
     engine.loadDocMap(
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv"
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/AUC_org.csv"
     );
 
     engine.loadBarrels();
 
     engine.setDatasetPath(
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json"
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/arxiv-metadata.json"
     );
 
     auto t4 = Clock1::now();
@@ -68,11 +72,11 @@ int main() {
 
     // PHASE 2.5: INIT DYNAMIC INDEXER
     DynamicIndexer indexer(
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Dataset/arxiv-metadata.json",
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Lexicon/Lexicon (arxiv-metadata).txt",
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/ForwardIndextest.txt",
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/AUC.csv",
-        "/home/aliakbar/CLionProjects/StellarTrace/cmake-build-debug/Barrels"
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/arxiv-metadata.json",
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/Lexicon (arxiv-metadata)_org.txt",
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/ForwardIndex_org.txt",
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/AUC_org.csv",
+        "/home/altair/CLionProjects/StellarTrace/OriginalData/Bar_org"
     );
 
     // PHASE 3: START HTTP SERVER

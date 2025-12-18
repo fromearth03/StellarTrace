@@ -27,7 +27,8 @@ public:
 
         // Step 1: Collect all .txt files in the folder
         for (const auto& entry : fs::directory_iterator(folderPath)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".txt") {
+            if (entry.is_regular_file()
+                && entry.path().extension() == ".txt") {
                 files.push_back(entry.path().string());
             }
         }

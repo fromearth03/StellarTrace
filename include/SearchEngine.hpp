@@ -21,7 +21,8 @@ struct Vector {
     std::vector<float> values;
     float dot(const Vector& other) const {
         float sum = 0;
-        for (size_t i = 0; i < values.size(); ++i) sum += values[i] * other.values[i];
+        for (size_t i = 0; i < values.size(); ++i)
+            sum += values[i] * other.values[i];
         return sum;
     }
     float magnitude() const {
@@ -50,7 +51,9 @@ struct SearchResult {
     std::string docId;
     double score;
     DocMetadata meta;
-    bool operator>(const SearchResult& o) const { return score > o.score; }
+    bool operator>(const SearchResult& o) const {
+        return score > o.score;
+    }
 };
 
 struct TermInfo {
@@ -66,8 +69,9 @@ class SearchEngine {
 private:
     static constexpr int TOTAL_BARRELS = 100;
     static constexpr size_t MAX_DOCS_PER_TERM = 200000;
+    static constexpr size_t MAX_RESULTS = 200;
 
-    const std::string BARREL_DIR = "Barrels/";
+    const std::string BARREL_DIR = "Bar_org/";
 
     const std::unordered_set<std::string> STOPWORDS = {
         "the","is","are","was","were","to","of","and","or",
@@ -77,7 +81,7 @@ private:
     std::unordered_map<std::string, int> lexicon;
     std::unordered_map<std::string, DocMetadata> docTable;
     std::unordered_map<int, long long> barrelIndex[TOTAL_BARRELS];
-    std::unordered_map<std::string, Vector> wordVectors; // For Semantic Search
+    std::unordered_map<std::string, Vector> wordVectors;
 
     std::string rawDatasetPath;
 
@@ -100,128 +104,119 @@ private:
         return s;
     }
 
-    // --- Spelling Correction Logic (Edit Distance) ---
-    int editDistance(const std::string& s1, const std::string& s2) {
-        int m = s1.length(), n = s2.length();
+    // ===================== SPELLING =====================
+
+    int editDistance(const std::string& a, const std::string& b) {
+        int m = a.size(), n = b.size();
         std::vector<std::vector<int>> dp(m + 1, std::vector<int>(n + 1));
         for (int i = 0; i <= m; i++) dp[i][0] = i;
         for (int j = 0; j <= n; j++) dp[0][j] = j;
-        for (int i = 1; i <= m; i++) {
-            for (int j = 1; j <= n; j++) {
-                if (s1[i - 1] == s2[j - 1]) dp[i][j] = dp[i - 1][j - 1];
-                else dp[i][j] = 1 + std::min({ dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1] });
-            }
-        }
+        for (int i = 1; i <= m; i++)
+            for (int j = 1; j <= n; j++)
+                dp[i][j] = (a[i - 1] == b[j - 1])
+                    ? dp[i - 1][j - 1]
+                    : 1 + std::min({ dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1] });
         return dp[m][n];
     }
 
     std::string findCorrection(const std::string& word) {
-        std::string bestMatch = "";
-        int minDistance = 2; // Threshold for typo tolerance
-        for (auto const& [lexWord, id] : lexicon) {
-            if (std::abs((int)word.length() - (int)lexWord.length()) > minDistance) continue;
-            int dist = editDistance(word, lexWord);
-            if (dist < minDistance) {
-                minDistance = dist;
-                bestMatch = lexWord;
+        std::string best;
+        int bestDist = 2;
+        for (auto& [w, _] : lexicon) {
+            if (std::abs((int)w.size() - (int)word.size()) > bestDist) continue;
+            int d = editDistance(word, w);
+            if (d < bestDist) {
+                bestDist = d;
+                best = w;
             }
         }
-        return bestMatch;
+        return best;
     }
 
-    // --- Semantic Logic (Nearest Neighbor in Lexicon) [cite: 65, 67] ---
     std::string findSemanticNeighbor(const std::string& word) {
-        if (wordVectors.find(word) == wordVectors.end()) return "";
-        std::string bestMatch = "";
-        float maxSim = -1.0f;
-        for (auto const& [lexWord, id] : lexicon) {
-            if (wordVectors.count(lexWord)) {
-                float sim = wordVectors[word].dot(wordVectors[lexWord]) /
-                            (wordVectors[word].magnitude() * wordVectors[lexWord].magnitude());
-                if (sim > maxSim && sim > 0.7) { // 0.7 Similarity Threshold
-                    maxSim = sim;
-                    bestMatch = lexWord;
-                }
+        if (!wordVectors.count(word)) return "";
+        float bestSim = 0.7f;
+        std::string best;
+        for (auto& [w, _] : lexicon) {
+            if (!wordVectors.count(w)) continue;
+            float sim = wordVectors[word].dot(wordVectors[w]) /
+                        (wordVectors[word].magnitude() * wordVectors[w].magnitude());
+            if (sim > bestSim) {
+                bestSim = sim;
+                best = w;
             }
         }
-        return bestMatch;
+        return best;
     }
 
-    // ===================== THREAD-SAFE POSTING FETCH =====================
+    // ===================== BARREL FETCH =====================
 
     InvertedList fetchPostingList(int wordID) {
         InvertedList result;
         int bID = wordID % TOTAL_BARRELS;
+
         std::ifstream file(BARREL_DIR + "barrel_" + std::to_string(bID) + ".txt");
         if (!file.is_open()) return result;
+
         std::string line;
         auto it = barrelIndex[bID].find(wordID);
         if (it != barrelIndex[bID].end()) {
             file.seekg(it->second);
             std::getline(file, line);
         }
-        if (line.empty() || line.rfind(std::to_string(wordID), 0) != 0) {
-            file.seekg(0);
-            while (std::getline(file, line)) {
-                std::stringstream ss(line);
-                int id; ss >> id;
-                if (id == wordID) break;
-                line.clear();
-            }
-        }
+
         if (line.empty()) return result;
+
         std::stringstream ss(line);
         int id; ss >> id >> result.idf;
         std::string colon; ss >> colon;
+
         std::string token;
         while (ss >> token) {
             size_t p1 = token.find('(');
             size_t p2 = token.find(',');
             size_t p3 = token.find(')');
             if (p1 == std::string::npos) continue;
-            DocEntry e;
-            e.docId = token.substr(0, p1);
-            e.tf = parseInt(token.substr(p1 + 1, p2 - p1 - 1));
-            e.mask = parseInt(token.substr(p2 + 1, p3 - p2 - 1));
-            result.docs.push_back(e);
+            result.docs.push_back({
+                token.substr(0, p1),
+                parseInt(token.substr(p1 + 1, p2 - p1 - 1)),
+                parseInt(token.substr(p2 + 1, p3 - p2 - 1))
+            });
         }
         return result;
     }
 
-    std::vector<json> runStrictAND(std::vector<TermInfo>& terms) {
+    // ===================== SOFT OR SCORING =====================
+
+    std::vector<json> runSoftOR(std::vector<TermInfo>& terms) {
         std::unordered_map<std::string, double> scores;
-        bool first = true;
+
         for (auto& t : terms) {
             size_t limit = std::min(t.list.docs.size(), MAX_DOCS_PER_TERM);
-            std::unordered_map<std::string, const DocEntry*> lookup;
-            for (size_t i = 0; i < limit; ++i)
-                lookup[t.list.docs[i].docId] = &t.list.docs[i];
-            if (first) {
-                for (auto& [id, e] : lookup) scores[id] = score(*e, t.list.idf);
-                first = false;
-            } else {
-                for (auto it = scores.begin(); it != scores.end(); ) {
-                    auto f = lookup.find(it->first);
-                    if (f == lookup.end()) it = scores.erase(it);
-                    else { it->second += score(*f->second, t.list.idf); ++it; }
-                }
+            for (size_t i = 0; i < limit; ++i) {
+                const DocEntry& e = t.list.docs[i];
+                scores[e.docId] += score(e, t.list.idf);
             }
-            if (scores.empty()) break;
         }
         return finalize(scores);
     }
 
     std::vector<json> finalize(std::unordered_map<std::string, double>& scores) {
         std::vector<SearchResult> results;
+
         for (auto& [doc, sc] : scores) {
             if (!docTable.count(doc)) continue;
             results.push_back({ doc, sc, docTable.at(doc) });
         }
+
         if (results.empty()) return {};
-        size_t k = std::min<size_t>(10, results.size());
+
+        size_t k = std::min(MAX_RESULTS, results.size());
         std::partial_sort(results.begin(), results.begin() + k, results.end(), std::greater<>());
+
         std::ifstream raw(rawDatasetPath, std::ios::binary);
         std::vector<json> out;
+
         for (size_t i = 0; i < k; ++i) {
             raw.seekg(results[i].meta.offset);
             std::vector<char> buf(results[i].meta.length);
@@ -237,11 +232,13 @@ private:
 
 public:
     void setDatasetPath(const std::string& p) { rawDatasetPath = p; }
+
     void loadLexicon(const std::string& p) {
         std::ifstream f(p);
         std::string w; int id;
         while (f >> w >> id) lexicon[w] = id;
     }
+
     void loadDocMap(const std::string& p) {
         std::ifstream f(p);
         std::string line; std::getline(f, line);
@@ -249,9 +246,11 @@ public:
             std::stringstream ss(line);
             std::string seg; std::vector<std::string> v;
             while (std::getline(ss, seg, '|')) v.push_back(seg);
-            if (v.size() >= 4) docTable[v[1]] = { v[0], parseLong(v[2]), parseLong(v[3]) };
+            if (v.size() >= 4)
+                docTable[v[1]] = { v[0], parseLong(v[2]), parseLong(v[3]) };
         }
     }
+
     void loadBarrels() {
         for (int i = 0; i < TOTAL_BARRELS; ++i) {
             std::ifstream idx(BARREL_DIR + "barrel_" + std::to_string(i) + ".idx");
@@ -260,7 +259,7 @@ public:
         }
     }
 
-    // ===================== SEARCH WITH SEMANTIC/SPELLING =====================
+    // ===================== SEARCH =====================
 
     std::vector<json> search(const std::string& query) {
         std::stringstream qs(query);
@@ -272,27 +271,18 @@ public:
             std::transform(term.begin(), term.end(), term.begin(), ::tolower);
             if (STOPWORDS.count(term)) continue;
 
-            std::string processedTerm = "";
-
-            // 1. Check Lexicon [cite: 52]
-            if (lexicon.count(term)) {
-                processedTerm = term;
-            }
-            // 2. Try Spelling Correction if not in Lexicon [cite: 66]
+            std::string t;
+            if (lexicon.count(term)) t = term;
             else {
-                processedTerm = findCorrection(term);
-                // 3. Try Semantic Fallback if no spelling match [cite: 65, 67]
-                if (processedTerm.empty()) {
-                    processedTerm = findSemanticNeighbor(term);
-                }
+                t = findCorrection(term);
+                if (t.empty()) t = findSemanticNeighbor(term);
             }
+            if (t.empty()) continue;
 
-            // 4. Drop word if all methods fail
-            if (processedTerm.empty()) continue;
-
-            int wid = lexicon[processedTerm];
-            futures.push_back(std::async(std::launch::async, &SearchEngine::fetchPostingList, this, wid));
-            terms.push_back({ processedTerm, wid, 0, {} });
+            int wid = lexicon[t];
+            futures.push_back(std::async(std::launch::async,
+                &SearchEngine::fetchPostingList, this, wid));
+            terms.push_back({ t, wid, 0, {} });
         }
 
         if (terms.empty()) return {};
@@ -302,14 +292,7 @@ public:
             terms[i].docCount = terms[i].list.docs.size();
         }
 
-        std::sort(terms.begin(), terms.end(), [](auto& a, auto& b) { return a.docCount < b.docCount; });
-
-        while (!terms.empty()) {
-            auto results = runStrictAND(terms);
-            if (!results.empty()) return results;
-            terms.pop_back(); // Relaxation Loop [cite: 60, 61]
-        }
-        return {};
+        return runSoftOR(terms);
     }
 };
 
