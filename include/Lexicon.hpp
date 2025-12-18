@@ -69,7 +69,7 @@ public:
                 // Process JSON lines: extract "title" and "abstract"
                 try {
                     json paper = json::parse(line);
-                    //----------------------------------------------------------------------------------
+                    
                     auto safe_get_string = [](const json& j) -> std::string {
                         if (!j.is_null()) {
                             // Check if it is a string (optional, but robust)
@@ -79,7 +79,7 @@ public:
                         }
                         return ""; // Return empty string if null or missing/non-string
                     };
-                    //====================================================================================
+                    
                     if (paper.contains("title")) content += safe_get_string(paper["title"]) + " ";
                     if (paper.contains("abstract")) content += safe_get_string(paper["abstract"]) + " ";
 

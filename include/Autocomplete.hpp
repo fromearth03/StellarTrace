@@ -26,7 +26,7 @@ private:
     }
 
 public:
-    // ================= LOAD LEXICON =================
+    // LOAD LEXICON
     void loadLexicon(const std::string& lexiconPath) {
         std::ifstream f(lexiconPath);
         if (!f.is_open()) return;
@@ -38,7 +38,7 @@ public:
             std::string w = normalize(word);
             if (w.size() < MIN_LEN) continue;
 
-            // 🔥 STORE ALL PREFIXES
+            // STORE ALL PREFIXES
             for (size_t i = MIN_LEN; i <= w.size() && i <= MAX_PREFIX; ++i) {
                 prefixMap[w.substr(0, i)].push_back(w);
             }
@@ -53,7 +53,7 @@ public:
         }
     }
 
-    // ================= QUERY =================
+    // QUERY
     std::vector<std::string> suggest(const std::string& input) const {
         std::string q = normalize(input);
         if (q.size() < MIN_LEN)
