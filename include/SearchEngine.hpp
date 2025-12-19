@@ -99,8 +99,8 @@ private:
 
     double score(const DocEntry& e, double idf) {
         double s = e.tf * idf;
-        if (e.mask == 1) s += 10;
-        else if (e.mask == 2) s += 5;
+        if (e.mask == 1) s += 5;
+        else if (e.mask == 2) s += 10;
         return s;
     }
 
