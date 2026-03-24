@@ -192,7 +192,7 @@ public:
 
             long long pos = txt.tellp();
 
-            txt << wid << " 0 : "
+            txt << wid << " 7.5 : "
                 << docID << "(" << c << "," << mask[wid] << ")\n";
             txt.close();
 

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <future>
 #include <cmath>
+#include <limits>
 #include <json.hpp>
 
 using json = nlohmann::json;
@@ -19,11 +20,11 @@ using json = nlohmann::json;
 
 struct Vector {
     std::vector<float> values;
-    float dot(const Vector& other) const {
-        float sum = 0;
+    float dot(const Vector& o) const {
+        float s = 0;
         for (size_t i = 0; i < values.size(); ++i)
-            sum += values[i] * other.values[i];
-        return sum;
+            s += values[i] * o.values[i];
+        return s;
     }
     float magnitude() const {
         return std::sqrt(dot(*this));
@@ -68,11 +69,10 @@ struct TermInfo {
 class SearchEngine {
 private:
     static constexpr int TOTAL_BARRELS = 100;
-    static constexpr size_t MAX_DOCS_PER_TERM = 200000;
     static constexpr size_t MAX_RESULTS = 200;
 
-    const std::string BARREL_DIR = "Bar_org/";
-
+    const std::string BARREL_DIR =
+    "/home/aliakbar/CLionProjects/StellarTrace/OriginalData/Bar_org/";
     const std::unordered_set<std::string> STOPWORDS = {
         "the","is","are","was","were","to","of","and","or",
         "a","an","in","on","for","with","by","as","at","from","their"
@@ -86,6 +86,10 @@ private:
     std::string rawDatasetPath;
 
     // ===================== HELPERS =====================
+
+    bool isDynamicDoc(const std::string& id) const {
+        return id.rfind("new", 0) == 0;
+    }
 
     int parseInt(std::string s) {
         s.erase(std::remove(s.begin(), s.end(), ','), s.end());
@@ -111,11 +115,13 @@ private:
         std::vector<std::vector<int>> dp(m + 1, std::vector<int>(n + 1));
         for (int i = 0; i <= m; i++) dp[i][0] = i;
         for (int j = 0; j <= n; j++) dp[0][j] = j;
+
         for (int i = 1; i <= m; i++)
             for (int j = 1; j <= n; j++)
                 dp[i][j] = (a[i - 1] == b[j - 1])
                     ? dp[i - 1][j - 1]
                     : 1 + std::min({ dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1] });
+
         return dp[m][n];
     }
 
@@ -139,8 +145,9 @@ private:
         std::string best;
         for (auto& [w, _] : lexicon) {
             if (!wordVectors.count(w)) continue;
-            float sim = wordVectors[word].dot(wordVectors[w]) /
-                        (wordVectors[word].magnitude() * wordVectors[w].magnitude());
+            float sim =
+                wordVectors[word].dot(wordVectors[w]) /
+                (wordVectors[word].magnitude() * wordVectors[w].magnitude());
             if (sim > bestSim) {
                 bestSim = sim;
                 best = w;
@@ -152,23 +159,22 @@ private:
     // ===================== BARREL FETCH =====================
 
     InvertedList fetchPostingList(int wordID) {
-        InvertedList result;
-        int bID = wordID % TOTAL_BARRELS;
+        InvertedList r;
+        int b = wordID % TOTAL_BARRELS;
 
-        std::ifstream file(BARREL_DIR + "barrel_" + std::to_string(bID) + ".txt");
-        if (!file.is_open()) return result;
+        auto it = barrelIndex[b].find(wordID);
+        if (it == barrelIndex[b].end()) return r;
 
+        std::ifstream f(BARREL_DIR + "barrel_" + std::to_string(b) + ".txt");
+        if (!f.is_open()) return r;
+
+        f.seekg(it->second);
         std::string line;
-        auto it = barrelIndex[bID].find(wordID);
-        if (it != barrelIndex[bID].end()) {
-            file.seekg(it->second);
-            std::getline(file, line);
-        }
-
-        if (line.empty()) return result;
+        std::getline(f, line);
+        if (line.empty()) return r;
 
         std::stringstream ss(line);
-        int id; ss >> id >> result.idf;
+        int id; ss >> id >> r.idf;
         std::string colon; ss >> colon;
 
         std::string token;
@@ -177,53 +183,38 @@ private:
             size_t p2 = token.find(',');
             size_t p3 = token.find(')');
             if (p1 == std::string::npos) continue;
-            result.docs.push_back({
+            r.docs.push_back({
                 token.substr(0, p1),
                 parseInt(token.substr(p1 + 1, p2 - p1 - 1)),
                 parseInt(token.substr(p2 + 1, p3 - p2 - 1))
             });
         }
-        return result;
+        return r;
     }
 
-    // ===================== SOFT OR SCORING =====================
+    // ===================== FINALIZE =====================
 
-    std::vector<json> runSoftOR(std::vector<TermInfo>& terms) {
-        std::unordered_map<std::string, double> scores;
+    std::vector<json> finalize(std::unordered_map<std::string,double>& scores) {
+        std::vector<SearchResult> res;
+        for (auto& [d,s] : scores)
+            if (docTable.count(d))
+                res.push_back({ d, s, docTable[d] });
 
-        for (auto& t : terms) {
-            size_t limit = std::min(t.list.docs.size(), MAX_DOCS_PER_TERM);
-            for (size_t i = 0; i < limit; ++i) {
-                const DocEntry& e = t.list.docs[i];
-                scores[e.docId] += score(e, t.list.idf);
-            }
-        }
-        return finalize(scores);
-    }
+        if (res.empty()) return {};
 
-    std::vector<json> finalize(std::unordered_map<std::string, double>& scores) {
-        std::vector<SearchResult> results;
-
-        for (auto& [doc, sc] : scores) {
-            if (!docTable.count(doc)) continue;
-            results.push_back({ doc, sc, docTable.at(doc) });
-        }
-
-        if (results.empty()) return {};
-
-        size_t k = std::min(MAX_RESULTS, results.size());
-        std::partial_sort(results.begin(), results.begin() + k, results.end(), std::greater<>());
+        size_t k = std::min(MAX_RESULTS, res.size());
+        std::partial_sort(res.begin(), res.begin()+k, res.end(), std::greater<>());
 
         std::ifstream raw(rawDatasetPath, std::ios::binary);
         std::vector<json> out;
 
         for (size_t i = 0; i < k; ++i) {
-            raw.seekg(results[i].meta.offset);
-            std::vector<char> buf(results[i].meta.length);
+            raw.seekg(res[i].meta.offset);
+            std::vector<char> buf(res[i].meta.length);
             raw.read(buf.data(), buf.size());
             try {
                 json j = json::parse(std::string(buf.begin(), buf.end()));
-                j["relevance_score"] = results[i].score;
+                j["relevance_score"] = res[i].score;
                 out.push_back(j);
             } catch (...) {}
         }
@@ -231,14 +222,14 @@ private:
     }
 
 public:
-    void setDatasetPath(const std::string& p) { rawDatasetPath = p; }
+    // ===================== LOADERS =====================
 
+    void setDatasetPath(const std::string& p) { rawDatasetPath = p; }
     void loadLexicon(const std::string& p) {
         std::ifstream f(p);
         std::string w; int id;
         while (f >> w >> id) lexicon[w] = id;
     }
-
     void loadDocMap(const std::string& p) {
         std::ifstream f(p);
         std::string line; std::getline(f, line);
@@ -250,7 +241,6 @@ public:
                 docTable[v[1]] = { v[0], parseLong(v[2]), parseLong(v[3]) };
         }
     }
-
     void loadBarrels() {
         for (int i = 0; i < TOTAL_BARRELS; ++i) {
             std::ifstream idx(BARREL_DIR + "barrel_" + std::to_string(i) + ".idx");
@@ -262,6 +252,29 @@ public:
     // ===================== SEARCH =====================
 
     std::vector<json> search(const std::string& query) {
+
+        // 🔥 NRT OVERRIDE FOR DYNAMIC DOCS
+        std::ifstream raw(rawDatasetPath, std::ios::binary);
+        std::string q = query;
+        std::transform(q.begin(), q.end(), q.begin(), ::tolower);
+
+        for (auto& [id, meta] : docTable) {
+            if (!isDynamicDoc(id)) continue;
+            raw.seekg(meta.offset);
+            std::vector<char> buf(meta.length);
+            raw.read(buf.data(), buf.size());
+            try {
+                json j = json::parse(std::string(buf.begin(), buf.end()));
+                std::string text = j.dump();
+                std::transform(text.begin(), text.end(), text.begin(), ::tolower);
+                if (text.find(q) != std::string::npos) {
+                    j["relevance_score"] = std::numeric_limits<double>::max();
+                    return { j };
+                }
+            } catch (...) {}
+        }
+
+        // 🔹 FULL SEMANTIC + SPELLING PIPELINE
         std::stringstream qs(query);
         std::string term;
         std::vector<TermInfo> terms;
@@ -271,12 +284,8 @@ public:
             std::transform(term.begin(), term.end(), term.begin(), ::tolower);
             if (STOPWORDS.count(term)) continue;
 
-            std::string t;
-            if (lexicon.count(term)) t = term;
-            else {
-                t = findCorrection(term);
-                if (t.empty()) t = findSemanticNeighbor(term);
-            }
+            std::string t = lexicon.count(term) ? term : findCorrection(term);
+            if (t.empty()) t = findSemanticNeighbor(term);
             if (t.empty()) continue;
 
             int wid = lexicon[t];
@@ -287,12 +296,14 @@ public:
 
         if (terms.empty()) return {};
 
+        std::unordered_map<std::string,double> scores;
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i].list = futures[i].get();
-            terms[i].docCount = terms[i].list.docs.size();
+            for (auto& e : terms[i].list.docs)
+                scores[e.docId] += score(e, terms[i].list.idf);
         }
 
-        return runSoftOR(terms);
+        return finalize(scores);
     }
 };
 
