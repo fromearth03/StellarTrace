@@ -20,8 +20,8 @@ private:
     std::string outputDir;
 
 public:
-    BarrelGenerator(int nBarrels = 100)
-        : totalBarrels(nBarrels), outputDir("Bar_org") {}
+    BarrelGenerator(const std::string& dir, int nBarrels = 100)
+    : totalBarrels(nBarrels), outputDir(dir) {}
 
     // Creates barrels and index files from the input inverted index file
     // Input: path to inverted index file

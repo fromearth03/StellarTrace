@@ -41,8 +41,12 @@ public:
 
         while (std::getline(inFile, line)) {
             uint64_t length = line.size();  // length in bytes
-            json obj = json::parse(line);
-            std::string original_id = obj["id"];
+            json obj;
+            try {
+                obj = json::parse(line);
+            } catch (...) {
+                continue;
+            }            std::string original_id = obj["id"];
 
             indexFile << internal_id << "|" << original_id << "|" << offset << "|" << length << "\n";
 

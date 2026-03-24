@@ -20,6 +20,7 @@ private:
     std::string path;                 // Path to input file
     unsigned int wordID;              // Counter for unique words
     bool isJson;                      // Flag: true for JSON, false for plain text (.wet)
+    std::string outputPath;
 
     std::unordered_set<std::string> stopWords = {
         "the", "and", "is", "in", "at", "of", "on", "for", "to", "a", "an", "that", "it"
@@ -40,8 +41,10 @@ private:
 
 public:
     // Constructor: second parameter indicates JSON vs plain text
-    Lexicon(const std::string& filename, bool jsonFile = true)
-        : path(filename), wordID(0), isJson(jsonFile)
+    Lexicon(const std::string& filename,
+        const std::string& outPath,
+        bool jsonFile = true)
+    : path(filename), outputPath(outPath), wordID(0), isJson(jsonFile)
     {
         try {
             current_locale = std::locale(""); // Use system UTF-8 locale
@@ -145,16 +148,12 @@ public:
 
     // Save lexicon to a text file
     void createLexicon() {
-        std::filesystem::create_directories("Lexicon"); // ensure folder exists
 
-        // Extract just the input file name without directories
-        std::filesystem::path inputPath(path);
-        std::string filename = inputPath.stem().string(); // "arxiv-metadata" for example
+        std::filesystem::path outPath(outputPath);
+        std::filesystem::create_directories(outPath.parent_path());
 
-        // Safe output path in Lexicon folder
-        std::string outputfile = "Lexicon/Lexicon (" + filename + ")_org.txt";
+        std::ofstream out(outputPath);
 
-        std::ofstream out(outputfile);
         if (!out.is_open()) {
             std::cout << "CRITICAL ERROR: Cannot open output file.\n";
             return;
@@ -164,10 +163,12 @@ public:
             out << p.first << " " << p.second << "\n";
 
         out.close();
-        std::cout << "Lexicon written to " << outputfile
-                  << ". Total unique words: " << wordID << "\n";
-    }
 
+        std::cout << "Lexicon written to "
+                  << outputPath
+                  << ". Total unique words: "
+                  << wordID << "\n";
+    }
 };
 
 #endif // LEXICON_HPP

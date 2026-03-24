@@ -71,8 +71,7 @@ private:
     static constexpr int TOTAL_BARRELS = 100;
     static constexpr size_t MAX_RESULTS = 200;
 
-    const std::string BARREL_DIR =
-    "/home/aliakbar/CLionProjects/StellarTrace/OriginalData/Bar_org/";
+    std::string BARREL_DIR;
     const std::unordered_set<std::string> STOPWORDS = {
         "the","is","are","was","were","to","of","and","or",
         "a","an","in","on","for","with","by","as","at","from","their"
@@ -165,7 +164,7 @@ private:
         auto it = barrelIndex[b].find(wordID);
         if (it == barrelIndex[b].end()) return r;
 
-        std::ifstream f(BARREL_DIR + "barrel_" + std::to_string(b) + ".txt");
+        std::ifstream f(BARREL_DIR + "/barrel_" + std::to_string(b) + ".txt");
         if (!f.is_open()) return r;
 
         f.seekg(it->second);
@@ -223,7 +222,9 @@ private:
 
 public:
     // ===================== LOADERS =====================
-
+    void setBarrelDir(const std::string& path) {
+        BARREL_DIR = path;
+    }
     void setDatasetPath(const std::string& p) { rawDatasetPath = p; }
     void loadLexicon(const std::string& p) {
         std::ifstream f(p);
@@ -241,9 +242,11 @@ public:
                 docTable[v[1]] = { v[0], parseLong(v[2]), parseLong(v[3]) };
         }
     }
-    void loadBarrels() {
+    void loadBarrels(const std::string& dir) {
+        BARREL_DIR = dir;
+
         for (int i = 0; i < TOTAL_BARRELS; ++i) {
-            std::ifstream idx(BARREL_DIR + "barrel_" + std::to_string(i) + ".idx");
+            std::ifstream idx(BARREL_DIR + "/barrel_" + std::to_string(i) + ".idx");
             int w; long long o;
             while (idx >> w >> o) barrelIndex[i][w] = o;
         }

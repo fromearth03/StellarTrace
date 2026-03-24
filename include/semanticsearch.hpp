@@ -12,6 +12,7 @@ class SemanticSearch {
 private:
     const std::unordered_set<std::string>& lexicon;
 
+
 public:
     explicit SemanticSearch(const std::unordered_set<std::string>& lex)
         : lexicon(lex) {}

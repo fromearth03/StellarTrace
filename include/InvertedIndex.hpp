@@ -12,10 +12,12 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <filesystem>
 
 class InvertedIndex {
     std::string path_lexicon;
     std::string path_forward;
+    std::string path_inverted_output;
 
     std::unordered_map<std::string, unsigned int> words;
 
@@ -25,8 +27,14 @@ class InvertedIndex {
     std::map<unsigned int, std::vector<std::tuple<std::string, unsigned int, int>>> i_index;
 
 public:
-    InvertedIndex(std::string p_Lexicon, std::string p_Forward) :
-        path_lexicon(p_Lexicon), path_forward(p_Forward) {}
+    InvertedIndex(
+    std::string p_Lexicon,
+    std::string p_Forward,
+    std::string p_Output
+) :
+    path_lexicon(p_Lexicon),
+    path_forward(p_Forward),
+    path_inverted_output(p_Output) {}
 
     void lexiconCreater() {
         std::ifstream ifs(path_lexicon);
@@ -111,8 +119,11 @@ public:
 
         // STEP 2: WRITE TO FILE
         std::cout << "Writing Inverted Index to Disk..." << std::endl;
+        std::filesystem::create_directories(
+    std::filesystem::path(path_inverted_output).parent_path()
+);
 
-        std::ofstream out("inverted_index_tst.txt");
+        std::ofstream out(path_inverted_output);
         if (!out.is_open()) return;
 
         size_t writeCount = 0;

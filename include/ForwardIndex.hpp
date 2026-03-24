@@ -9,6 +9,7 @@
 #include <sstream>
 #include <locale>
 #include <algorithm>
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -16,6 +17,7 @@ class ForwardIndex {
     std::string path_lexicon;
     std::string path_dataset;
     std::locale current_locale;
+    std::string forward_output_path;
 
     std::unordered_map<std::string, unsigned int> words;
     std::unordered_map<std::string, std::list<unsigned int>> f_index;
@@ -25,8 +27,14 @@ class ForwardIndex {
     };
 
 public:
-    ForwardIndex(std::string p_lexicon, std::string p_dataset)
-        : path_lexicon(p_lexicon), path_dataset(p_dataset) {
+    ForwardIndex(
+    std::string p_lexicon,
+    std::string p_dataset,
+    std::string p_output
+)
+    : path_lexicon(p_lexicon),
+      path_dataset(p_dataset),
+      forward_output_path(p_output) {
         try { current_locale = std::locale(""); }
         catch (...) { current_locale = std::locale::classic(); }
     }
@@ -148,7 +156,10 @@ public:
 
         // write to file in required format
        // std:: string outputfile = "ForwardIndextest.txt";
-        std::ofstream out("ForwardIndex_org.txt", std::ios::app);
+            std::filesystem::create_directories(
+            std::filesystem::path(forward_output_path).parent_path()
+             );
+        std::ofstream out(forward_output_path, std::ios::app);
         out << id << " : ";
         for (auto& kv : freq) {
             unsigned int wid = kv.first;
