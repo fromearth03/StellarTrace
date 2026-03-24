@@ -256,24 +256,32 @@ public:
 
     std::vector<json> search(const std::string& query) {
 
-        // 🔥 NRT OVERRIDE FOR DYNAMIC DOCS
+        // 🔥 NRT DYNAMIC DOC BOOST (NO EARLY RETURN)
+        std::unordered_map<std::string,double> dynamicScores;
+
         std::ifstream raw(rawDatasetPath, std::ios::binary);
         std::string q = query;
         std::transform(q.begin(), q.end(), q.begin(), ::tolower);
 
         for (auto& [id, meta] : docTable) {
+
             if (!isDynamicDoc(id)) continue;
+
             raw.seekg(meta.offset);
+
             std::vector<char> buf(meta.length);
             raw.read(buf.data(), buf.size());
+
             try {
                 json j = json::parse(std::string(buf.begin(), buf.end()));
+
                 std::string text = j.dump();
                 std::transform(text.begin(), text.end(), text.begin(), ::tolower);
+
                 if (text.find(q) != std::string::npos) {
-                    j["relevance_score"] = std::numeric_limits<double>::max();
-                    return { j };
+                    dynamicScores[id] += 15.0;  // boost new docs
                 }
+
             } catch (...) {}
         }
 
@@ -297,9 +305,12 @@ public:
             terms.push_back({ t, wid, 0, {} });
         }
 
-        if (terms.empty()) return {};
+        if (terms.empty() && dynamicScores.empty())
+            return {};
 
-        std::unordered_map<std::string,double> scores;
+        // MERGE SCORES
+        std::unordered_map<std::string,double> scores = dynamicScores;
+
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i].list = futures[i].get();
             for (auto& e : terms[i].list.docs)
