@@ -5,6 +5,9 @@
 [![Language](https://img.shields.io/badge/C++-17-blue.svg)](https://isocpp.org/)
 [![Build](https://img.shields.io/badge/Build-CMake-green.svg)]()
 
+## 🚀 Live Site
+The application is live at: [https://stellar-trace.tech/](https://stellar-trace.tech/)
+
 ## 📖 Overview
 
 **StellarTrace** is a custom-built, full-text search engine designed to index and retrieve information from large-scale datasets efficiently.
