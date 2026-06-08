@@ -69,7 +69,7 @@ struct TermInfo {
 class SearchEngine {
 private:
     static constexpr int TOTAL_BARRELS = 100;
-    static constexpr size_t MAX_RESULTS = 200;
+    static constexpr size_t MAX_RESULTS = 100;
 
     std::string BARREL_DIR;
     const std::unordered_set<std::string> STOPWORDS = {
